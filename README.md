@@ -14,7 +14,20 @@ CI builds static **rsd**, **rsctl**, and **rs-agent** for:
 | darwin-amd64 (x86_64) | darwin / amd64 |
 | darwin-arm64 (aarch64) | darwin / arm64 |
 
-Download artifacts from [GitHub Actions](https://github.com/nmagill123/revshell-io/actions) or tagged [Releases](https://github.com/nmagill123/revshell-io/releases).
+**CI artifacts** (every push to `main`): [Actions → Build](https://github.com/nmagill123/revshell-io/actions/workflows/build.yml) — download per-platform artifacts from the latest green run.
+
+**GitHub Releases** (tagged versions only — not created on ordinary pushes):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Or trigger manually: Actions → **Release** → Run workflow.
+
+Latest release: https://github.com/nmagill123/revshell-io/releases/latest
+
+Each release includes `rsd-*`, `rsctl-*`, `rs-agent-*`, README metadata per arch, and `agents-bin-linux.tar.gz` for `rsd --agents-dir`.
 
 ```
 make all          # rsd, rsctl, and cross-compiled rs-agent binaries

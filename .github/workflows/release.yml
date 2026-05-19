@@ -52,7 +52,8 @@ jobs:
               echo "commit=${GITHUB_SHA}"
             } > "release-assets/README-${slug}.txt"
           done
-          ls -la release-assets/
+          tar -czf release-assets/agents-bin-linux.tar.gz -C agents-bin .
+          ls -la release-assets/ agents-bin/
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
