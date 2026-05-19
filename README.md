@@ -1,4 +1,4 @@
-# rsd
+# revshell-io
 
 Callback/session broker for authorized pentests. Targets call back over HTTPS, operators attach from browser or CLI.
 
@@ -156,3 +156,5 @@ GET    /s/:id/:secret/py         python shim
 ## Storage
 
 BBolt (single file, `rsd.db`). No external dependencies.
+
+Authorized security testing and lab use only.

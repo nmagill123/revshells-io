@@ -1,3 +1,4 @@
+# Project binaries (repo root)
 /rsd
 /rsctl
 /rs-agent
@@ -5,3 +6,19 @@ agents-bin/
 dist/
 release-assets/
 *.db
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+
+.env
