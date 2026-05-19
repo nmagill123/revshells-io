@@ -1,0 +1,7 @@
+/rsd
+/rsctl
+/rs-agent
+agents-bin/
+dist/
+release-assets/
+*.db

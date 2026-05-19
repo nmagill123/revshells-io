@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rsd</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+.main { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem; }
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+.panel h2 { font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--text); font-weight: 600; }
+.panel > p.hint { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.main h2.section { font-size: 1rem; margin-bottom: 1rem; color: var(--text-muted); font-weight: 500; }
+.session-list { list-style: none; }
+.session-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.session-item:hover { border-color: var(--accent); }
+.session-name { font-weight: 600; font-family: ui-monospace, monospace; }
+.session-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.45; }
+.session-meta .tag { display: inline-block; margin-right: 0.5rem; }
+.session-state { padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.state-waiting { background: var(--warn-bg); color: var(--warn-fg); }
+.state-active { background: var(--success-bg); color: var(--success-fg); }
+.state-expired, .state-killed { opacity: 0.6; }
+.session-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+.empty { color: var(--text-muted); text-align: center; padding: 2rem; }
+.token-expiry { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">rsd</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+    <button type="button" class="btn btn-primary" id="new-session">+ New session</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="panel" id="rsctl-panel">
+    <h2>rsctl</h2>
+    <p class="hint">Mint a workspace CLI token (24h, scoped to your sessions). Run <code>rsctl login</code> once, then <code>rsctl list</code> / <code>rsctl attach</code>.</p>
+    <div id="rsctl-copy-rows"></div>
+    <p class="token-expiry" id="operator-expiry"></p>
+    <button type="button" class="btn" id="refresh-operator-token" style="margin-top:0.5rem">New token</button>
+  </div>
+
+  <h2 class="section">Your sessions</h2>
+  <ul class="session-list" id="sessions"></ul>
+</div>
+
+<div id="disclaimer-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Authorized use only</h2>
+    <p>This tool is intended for authorized security testing, research, and lab environments only. You must have explicit permission before use on any system you do not own or control.</p>
+    <p>The author is not responsible for misuse, damage, or legal consequences arising from use of this software.</p>
+    <button type="button" class="btn btn-primary" id="disclaimer-accept">I understand</button>
+  </div>
+</div>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>
+rsdInitTopbar();
+
+function formatTargetMeta(data) {
+  const t = data.last_target || (data.targets && data.targets[0]);
+  if (!t) return '<span class="tag">no callback yet</span>';
+  const sys = t.system || {};
+  const os = sys.os_name || t.os || 'unknown';
+  const kernel = sys.kernel || '';
+  const host = sys.hostname || t.host || '';
+  const user = t.user || '';
+  const arch = sys.arch || t.arch || '';
+  let html = '';
+  if (user || host) html += `<span class="tag">${rsdEscapeHtml(user)}@${rsdEscapeHtml(host)}</span>`;
+  html += `<span class="tag">${rsdEscapeHtml(os)}</span>`;
+  if (arch) html += `<span class="tag">${rsdEscapeHtml(arch)}</span>`;
+  if (kernel) html += `<span class="tag">kernel ${rsdEscapeHtml(kernel)}</span>`;
+  return html;
+}
+
+async function ensureWorkspace() {
+  const res = await fetch('/web/workspace', { method: 'POST', credentials: 'include' });
+  if (!res.ok) throw new Error('workspace bootstrap failed');
+}
+
+async function loadOperatorToken(refresh) {
+  const stored = JSON.parse(localStorage.getItem(RSD_STORAGE_OPERATOR) || 'null');
+  if (!refresh && stored && stored.token && new Date(stored.expires_at) > new Date()) {
+    renderOperatorToken(stored);
+    return;
+  }
+  await ensureWorkspace();
+  const res = await fetch('/web/workspace-cli-token', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('failed to get workspace CLI token');
+  const data = await res.json();
+  localStorage.setItem(RSD_STORAGE_OPERATOR, JSON.stringify(data));
+  renderOperatorToken(data);
+}
+
+function renderOperatorToken(data) {
+  const server = data.server || location.origin;
+  const token = data.token;
+  const loginCmd = `rsctl login ${server} ${token}`;
+  const el = document.getElementById('rsctl-copy-rows');
+  el.innerHTML = '';
+  rsdAddCopyRow(el, 'login', loginCmd);
+  const exp = document.getElementById('operator-expiry');
+  if (data.expires_at) {
+    exp.textContent = 'Expires: ' + new Date(data.expires_at).toLocaleString();
+  }
+}
+
+document.getElementById('refresh-operator-token').addEventListener('click', () => {
+  loadOperatorToken(true).catch(e => alert(e.message));
+});
+
+async function createSession() {
+  await ensureWorkspace();
+  const res = await fetch('/web/sessions', { method: 'POST', credentials: 'include' });
+  if (!res.ok) throw new Error('failed to create session');
+  const data = await res.json();
+  rsdSaveSession({ id: data.id, token: data.token, name: data.name, createdAt: Date.now() });
+  window.location.href = '/' + data.id + '?t=' + data.token;
+}
+
+document.getElementById('new-session').addEventListener('click', () => {
+  createSession().catch(e => alert(e.message));
+});
+
+function renderSessions() {
+  const el = document.getElementById('sessions');
+  const list = rsdGetSessions();
+  if (!list.length) {
+    el.innerHTML = '<li class="empty">No sessions yet. Click <strong>New session</strong> to start.</li>';
+    return;
+  }
+  el.innerHTML = list.map(s => `
+    <li class="session-item" data-id="${s.id}">
+      <div>
+        <div class="session-name">${s.id}</div>
+        <div class="session-meta" data-meta>loading…</div>
+      </div>
+      <div class="session-actions">
+        <span class="session-state state-waiting" data-state>—</span>
+        <a class="btn" href="/${s.id}${s.token ? '?t=' + encodeURIComponent(s.token) : ''}">Open</a>
+        <button type="button" class="btn" data-remove>Remove</button>
+      </div>
+    </li>
+  `).join('');
+
+  el.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      rsdRemoveSession(btn.closest('.session-item').dataset.id);
+      renderSessions();
+    });
+  });
+
+  list.forEach(s => refreshState(s.id));
+}
+
+async function refreshState(id) {
+  const item = document.querySelector(`.session-item[data-id="${id}"]`);
+  if (!item) return;
+  const badge = item.querySelector('[data-state]');
+  const meta = item.querySelector('[data-meta]');
+  try {
+    const res = await fetch('/web/sessions/' + id, { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      badge.textContent = data.state || 'unknown';
+      badge.className = 'session-state state-' + (data.state || 'waiting');
+      meta.innerHTML = formatTargetMeta(data);
+    }
+  } catch {}
+}
+
+loadOperatorToken(false).catch(console.error);
+renderSessions();
+setInterval(() => { rsdGetSessions().forEach(s => refreshState(s.id)); }, 8000);
+</script>
+</body>
+</html>

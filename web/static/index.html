@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rsd</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; background: #0d1117; color: #c9d1d9; }
+.container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #58a6ff; }
+.session-list { list-style: none; }
+.session-item { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; }
+.session-item:hover { border-color: #58a6ff; }
+.session-name { font-weight: 600; color: #f0f6fc; }
+.session-meta { font-size: 0.85rem; color: #8b949e; margin-top: 0.25rem; }
+.session-state { padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.state-waiting { background: #1f2937; color: #fbbf24; }
+.state-active { background: #064e3b; color: #34d399; }
+.state-expired { background: #1c1917; color: #78716c; }
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.empty { color: #8b949e; text-align: center; padding: 3rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>rsd sessions</h1>
+  <ul class="session-list" id="sessions"></ul>
+</div>
+<script>
+async function load() {
+  const el = document.getElementById('sessions');
+  try {
+    const res = await fetch('/api/sessions');
+    if (!res.ok) { el.innerHTML = '<li class="empty">Unable to load sessions</li>'; return; }
+    const sessions = await res.json();
+    if (!sessions || sessions.length === 0) {
+      el.innerHTML = '<li class="empty">No active sessions</li>';
+      return;
+    }
+    el.innerHTML = sessions.map(s => `
+      <li class="session-item">
+        <div>
+          <div class="session-name"><a href="/s/${s.id}">${s.name || s.id}</a></div>
+          <div class="session-meta">${s.id} &middot; ${new Date(s.last_activity).toLocaleString()}</div>
+        </div>
+        <span class="session-state state-${s.state}">${s.state}</span>
+      </li>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = '<li class="empty">Error loading sessions</li>';
+  }
+}
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

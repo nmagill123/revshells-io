@@ -1,0 +1,103 @@
+# CI: static binaries for rsd, rsctl, and rs-agent across common arches.
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOFLAGS: -trimpath
+  LDFLAGS: -s -w
+
+jobs:
+  build:
+    name: ${{ matrix.platform_label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            platform_label: linux-amd64 (x86_64)
+          - goos: linux
+            goarch: arm64
+            platform_label: linux-arm64 (aarch64)
+          - goos: linux
+            goarch: "386"
+            platform_label: linux-386 (x86)
+          - goos: darwin
+            goarch: amd64
+            platform_label: darwin-amd64 (x86_64)
+          - goos: darwin
+            goarch: arm64
+            platform_label: darwin-arm64 (aarch64)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build static binaries
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          suffix="${{ matrix.goos }}-${{ matrix.goarch }}"
+          label="${{ matrix.platform_label }}"
+          go build -ldflags="$LDFLAGS" -o "dist/rsd-${suffix}" ./cmd/rsd
+          go build -ldflags="$LDFLAGS" -o "dist/rsctl-${suffix}" ./cmd/rsctl
+          go build -ldflags="$LDFLAGS" -o "dist/rs-agent-${suffix}" ./cmd/rs-agent
+          cat > "dist/BUILD-${suffix}.txt" <<EOF
+          revshell-io build metadata
+          platform: ${label}
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+          ref=${{ github.sha }}
+          workflow=${{ github.workflow }}
+          run_id=${{ github.run_id }}
+          EOF
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  agents-bundle:
+    name: agents-bin layout (linux)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-linux-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble agents-bin for rsd --agents-dir
+        run: |
+          mkdir -p agents-bin
+          for f in artifacts/rs-agent-linux-*; do
+            base=$(basename "$f")
+            cp "$f" "agents-bin/${base#rs-agent-}"
+          done
+          ls -la agents-bin/
+
+      - name: Upload agents-bin bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: agents-bin-linux-all
+          path: agents-bin/*

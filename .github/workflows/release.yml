@@ -1,0 +1,69 @@
+# Tagged releases: one GitHub release with all platform binaries attached.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GOFLAGS: -trimpath
+  LDFLAGS: -s -w
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build all platforms
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets agents-bin
+          platforms=(
+            "linux amd64 linux-amd64-x86_64"
+            "linux arm64 linux-arm64-aarch64"
+            "linux 386 linux-386-x86"
+            "darwin amd64 darwin-amd64-x86_64"
+            "darwin arm64 darwin-arm64-aarch64"
+          )
+          for row in "${platforms[@]}"; do
+            read -r goos goarch slug <<< "$row"
+            export GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0
+            go build -ldflags="$LDFLAGS" -o "release-assets/rsd-${slug}" ./cmd/rsd
+            go build -ldflags="$LDFLAGS" -o "release-assets/rsctl-${slug}" ./cmd/rsctl
+            go build -ldflags="$LDFLAGS" -o "release-assets/rs-agent-${slug}" ./cmd/rs-agent
+            if [ "$goos" = "linux" ]; then
+              cp "release-assets/rs-agent-${slug}" "agents-bin/${goos}-${goarch}"
+            fi
+            {
+              echo "revshell-io ${GITHUB_REF_NAME}"
+              echo "platform: ${slug}"
+              echo "GOOS=${goos} GOARCH=${goarch}"
+              echo "commit=${GITHUB_SHA}"
+            } > "release-assets/README-${slug}.txt"
+          done
+          ls -la release-assets/
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload agents-bin bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: agents-bin-linux-release
+          path: agents-bin/*
