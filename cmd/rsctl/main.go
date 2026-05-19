@@ -14,7 +14,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 	"nhooyr.io/websocket"
 )
 
@@ -226,11 +226,11 @@ func doAttach(sessionID string) error {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	oldState, err := makeRaw(int(os.Stdin.Fd()))
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		return fmt.Errorf("raw mode: %w", err)
 	}
-	defer restore(int(os.Stdin.Fd()), oldState)
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
 	wsClosed := make(chan struct{})
 	go func() {
@@ -322,33 +322,4 @@ func genCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&shimType, "type", "sh", "payload type: sh, nopty")
 	return cmd
-}
-
-type termState struct {
-	termios unix.Termios
-}
-
-func makeRaw(fd int) (*termState, error) {
-	termios, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
-	if err != nil {
-		return nil, err
-	}
-	old := &termState{termios: *termios}
-
-	termios.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
-	termios.Oflag &^= unix.OPOST
-	termios.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
-	termios.Cflag &^= unix.CSIZE | unix.PARENB
-	termios.Cflag |= unix.CS8
-	termios.Cc[unix.VMIN] = 1
-	termios.Cc[unix.VTIME] = 0
-
-	if err := unix.IoctlSetTermios(fd, unix.TIOCSETA, termios); err != nil {
-		return nil, err
-	}
-	return old, nil
-}
-
-func restore(fd int, state *termState) {
-	unix.IoctlSetTermios(fd, unix.TIOCSETA, &state.termios)
 }
