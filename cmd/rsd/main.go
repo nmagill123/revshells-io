@@ -33,6 +33,9 @@ func main() {
 	dbPath := flag.String("db", "rsd.db", "bbolt database path")
 	publicURL := flag.String("public-url", "http://localhost:8080", "public URL for payload generation")
 	agentsDir := flag.String("agents-dir", "agents-bin", "directory with rs-agent binaries per platform")
+	agentsGit := flag.Bool("agents-git", false, "on startup, download rs-agent release binaries from GitHub into --agents-dir")
+	agentsGitRepo := flag.String("agents-git-repo", "https://github.com/nmagill123/revshells-io", "GitHub repo for --agents-git")
+	agentsGitTag := flag.String("agents-git-tag", "", "release tag for --agents-git (e.g. v0.1.0); empty uses latest")
 	maxSessions := flag.Int("max-sessions-per-workspace", 12, "max active sessions per workspace")
 	flag.Parse()
 
@@ -53,6 +56,19 @@ func main() {
 	wsTargH := &transport.WSTargetHandler{B: b, OriginPatterns: originPatterns}
 	payloadH := &payload.PayloadHandler{PublicURL: strings.TrimRight(*publicURL, "/")}
 	agentStore := &agents.Store{Dir: *agentsDir}
+
+	if *agentsGit {
+		gitCfg := agents.GitSyncConfig{
+			Repo: *agentsGitRepo,
+			Tag:  *agentsGitTag,
+			Dir:  *agentsDir,
+		}
+		fmt.Fprintf(os.Stderr, "agents-git: syncing from %s → %s\n", agents.ReleaseDownloadBase(gitCfg), *agentsDir)
+		if err := agents.SyncFromGitHub(gitCfg); err != nil {
+			log.Fatalf("agents-git sync: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "agents-git: sync complete\n")
+	}
 
 	originMW := rsdmw.RequireSameOrigin(originPatterns)
 	rateStrict := rsdmw.RateLimit(0.5, 5)
@@ -143,8 +159,7 @@ func main() {
 
 	// Target callback endpoints (secret in URL)
 	r.Route("/s/{id}/{secret}", func(r chi.Router) {
-		r.Use(rateLoose)
-		r.Post("/register", pollH.Register)
+		r.With(rateLoose).Post("/register", pollH.Register)
 		r.Get("/poll", pollH.Poll)
 		r.Post("/push", pollH.Push)
 		r.Post("/event", pollH.Event)
@@ -329,11 +344,10 @@ func main() {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(rateLoose)
-		r.Get("/{id}/attach", attachHandler)
-		r.Get("/s/{id}/attach", attachHandler)
+		r.With(rateLoose).Get("/{id}/attach", attachHandler)
+		r.With(rateLoose).Get("/s/{id}/attach", attachHandler)
 
-		r.Get("/{id}/revshell", func(w http.ResponseWriter, req *http.Request) {
+		r.With(rateLoose).Get("/{id}/revshell", func(w http.ResponseWriter, req *http.Request) {
 			sessionID := chi.URLParam(req, "id")
 			sess, err := s.GetSession(sessionID)
 			if err != nil || sess.State == protocol.StateExpired || sess.State == protocol.StateKilled {
@@ -345,7 +359,7 @@ func main() {
 			payloadH.RevShell(w, req, sess.ID, sess.Secret)
 		})
 
-		r.Get("/{id}/nopty", func(w http.ResponseWriter, req *http.Request) {
+		r.With(rateLoose).Get("/{id}/nopty", func(w http.ResponseWriter, req *http.Request) {
 			sessionID := chi.URLParam(req, "id")
 			sess, err := s.GetSession(sessionID)
 			if err != nil || sess.State == protocol.StateExpired || sess.State == protocol.StateKilled {
@@ -357,7 +371,7 @@ func main() {
 			payloadH.RevShellNoPTY(w, req, sess.ID, sess.Secret)
 		})
 
-		r.Get("/{id}/agent/{platform}", func(w http.ResponseWriter, req *http.Request) {
+		r.With(rateLoose).Get("/{id}/agent/{platform}", func(w http.ResponseWriter, req *http.Request) {
 			sessionID := chi.URLParam(req, "id")
 			platform := chi.URLParam(req, "platform")
 			sess, err := s.GetSession(sessionID)
@@ -412,6 +426,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "rsd %s listening on %s\n", web.Version(), *listen)
 	fmt.Fprintf(os.Stderr, "public url: %s\n", *publicURL)
 	fmt.Fprintf(os.Stderr, "max sessions per workspace: %d\n", authCfg.MaxSessionsPerWorkspace)
+	fmt.Fprintf(os.Stderr, "agents dir: %s\n", *agentsDir)
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)

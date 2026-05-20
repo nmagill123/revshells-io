@@ -135,6 +135,25 @@ func runWebSocketPTY(cfg Config, reg protocol.RegisterPayload) error {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
+	go func() {
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+				err := conn.Ping(pingCtx)
+				pingCancel()
+				if err != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
 	regJSON, _ := json.Marshal(reg)
 	if err := conn.Write(ctx, websocket.MessageText, regJSON); err != nil {
 		return errPTYSetup
@@ -174,6 +193,8 @@ func runWebSocketPTY(cfg Config, reg protocol.RegisterPayload) error {
 		return errPTYSetup
 	}
 	defer ptmx.Close()
+	// Avoid a 0x0 terminal if the initial browser resize arrives late.
+	_ = pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 120})
 
 	go func() {
 		_ = cmd.Wait()
@@ -445,6 +466,14 @@ func runHTTPPoll(cfg Config, reg protocol.RegisterPayload) error {
 		pollResp, err := client.Do(req)
 		if err != nil {
 			time.Sleep(2 * time.Second)
+			continue
+		}
+		if pollResp.StatusCode != http.StatusOK &&
+			pollResp.StatusCode != http.StatusGone &&
+			pollResp.StatusCode != http.StatusNoContent {
+			_, _ = io.Copy(io.Discard, pollResp.Body)
+			pollResp.Body.Close()
+			time.Sleep(1500 * time.Millisecond)
 			continue
 		}
 		if pollResp.StatusCode == http.StatusGone {

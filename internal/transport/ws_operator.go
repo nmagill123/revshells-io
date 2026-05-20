@@ -3,9 +3,11 @@ package transport
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
+	"github.com/noahmagill/webhook-rev-shell/internal/operatorinput"
 	"nhooyr.io/websocket"
 )
 
@@ -43,6 +45,25 @@ func (h *WSOperatorHandler) Attach(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	go func() {
+		ticker := time.NewTicker(20 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+				err := conn.Ping(pingCtx)
+				pingCancel()
+				if err != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
 	for _, chunk := range room.Transcript.Snapshot() {
 		if err := conn.Write(ctx, websocket.MessageBinary, chunk); err != nil {
 			return
@@ -52,9 +73,14 @@ func (h *WSOperatorHandler) Attach(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer cancel()
 		for {
-			_, data, err := conn.Read(ctx)
+			typ, data, err := conn.Read(ctx)
 			if err != nil {
 				return
+			}
+			if typ == websocket.MessageText && !operatorinput.IsResizeMessage(data) {
+				// Browser operators should only send resize control frames as text.
+				// Drop any other text frames so they never reach the target shell.
+				continue
 			}
 			room.SendToClaimed(data)
 		}

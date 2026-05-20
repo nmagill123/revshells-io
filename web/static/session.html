@@ -90,12 +90,12 @@ function applyTermTheme() {
     : { background: '#0d1117', foreground: '#c9d1d9', cursor: '#58a6ff' };
   if (term) term.options.theme = termTheme;
 }
+const terminalEl = document.getElementById('terminal');
 const term = new Terminal({ cursorBlink: true, fontSize: 14, theme: termTheme });
 const fitAddon = new FitAddon.FitAddon();
 term.loadAddon(fitAddon);
-term.open(document.getElementById('terminal'));
+term.open(terminalEl);
 fitAddon.fit();
-window.addEventListener('resize', () => fitAddon.fit());
 window.addEventListener('rsd-theme', applyTermTheme);
 applyTermTheme();
 
@@ -110,6 +110,33 @@ function setStatus(state, text) {
 let beaconMode = null;
 let attachOpen = false;
 let resizeTimer = null;
+let currentWs = null;
+
+function sendResize() {
+  if (beaconMode === 'command') return;
+  if (!currentWs || currentWs.readyState !== WebSocket.OPEN) return;
+  if (term.cols > 0 && term.rows > 0) {
+    currentWs.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  }
+}
+
+function burstResizeSync() {
+  scheduleFitAndResize();
+  setTimeout(scheduleFitAndResize, 150);
+  setTimeout(scheduleFitAndResize, 500);
+  setTimeout(scheduleFitAndResize, 1500);
+}
+
+function scheduleFitAndResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    fitAddon.fit();
+    sendResize();
+  }, 50);
+}
+
+window.addEventListener('resize', scheduleFitAndResize);
+new ResizeObserver(() => scheduleFitAndResize()).observe(terminalEl);
 
 function formatBeaconInfo(t) {
   if (!t) return null;
@@ -151,6 +178,7 @@ function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/${sessionID}/attach?t=${encodeURIComponent(sessionToken)}`);
   ws.binaryType = 'arraybuffer';
+  currentWs = ws;
 
   let beaconInfoPolled = false;
   ws.onopen = () => {
@@ -158,10 +186,17 @@ function connect() {
     beaconInfoPolled = false;
     setStatus('connected', 'connected');
     updateSessionInfo();
+    // Push the actual fitted size immediately and again shortly after open.
+    burstResizeSync();
   };
   ws.onmessage = (ev) => {
     const data = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data;
     term.write(data);
+    // If the operator page connected before the target registered, resend once
+    // we see target traffic so the PTY does not stay at 0x0.
+    if (beaconMode !== 'command') {
+      burstResizeSync();
+    }
     if (!beaconInfoPolled) {
       beaconInfoPolled = true;
       updateSessionInfo();
@@ -169,28 +204,20 @@ function connect() {
   };
   ws.onclose = () => {
     attachOpen = false;
+    if (currentWs === ws) currentWs = null;
     setStatus('disconnected', 'disconnected');
     infoEl.textContent = 'Connection lost. Reconnecting…';
     setTimeout(connect, 3000);
   };
   ws.onerror = () => ws.close();
-
-  term.onData((data) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(new TextEncoder().encode(data));
-    }
-  });
-  term.onResize(({cols, rows}) => {
-    if (beaconMode === 'command') return;
-    if (ws.readyState !== WebSocket.OPEN) return;
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({type: 'resize', cols, rows}));
-      }
-    }, 80);
-  });
 }
+
+term.onData((data) => {
+  if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+    currentWs.send(new TextEncoder().encode(data));
+  }
+});
+term.onResize(() => sendResize());
 
 setStatus('waiting', 'connecting…');
 connect();
