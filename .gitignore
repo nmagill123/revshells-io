@@ -3,6 +3,7 @@
 /rsctl
 /rs-agent
 deploy/
+build/
 agents-bin/
 dist/
 release-assets/

@@ -3,10 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>rsd</title>
+<title>revshells.io | Webhook Style Reverse Shell Callbacks</title>
+<meta name="description" content="Webhook style reverse shell callbacks for CTFs and pentests. Launch browser and CLI-managed reverse shell sessions, PTY beacons, and no-PTY command channels from a simple web callback URL.">
+<meta name="robots" content="index,follow">
+<meta name="google-site-verification" content="waOmgqyYZvYMR0y3C4qU5Uc7LaWhDwqJ6av7qz7w8cU">
+<link rel="canonical" href="https://revshells.io/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="revshells.io | Webhook Style Reverse Shell Callbacks">
+<meta property="og:description" content="Webhook style reverse shell callbacks for CTFs and pentests with browser and CLI workflows, PTY shells, and no-PTY command mode.">
+<meta property="og:url" content="https://revshells.io/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="revshells.io | Webhook Style Reverse Shell Callbacks">
+<meta name="twitter:description" content="Webhook style reverse shell callbacks for CTFs and pentests with browser and CLI workflows.">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="shortcut icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/common.css">
 <style>
 .main { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem; }
+.hero {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.hero h1 {
+  font-size: 1.45rem;
+  line-height: 1.25;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+.hero p {
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 0.75rem;
+}
+.hero-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+}
 .panel {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -43,6 +80,17 @@
 </style>
 </head>
 <body>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "revshells.io",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS",
+  "description": "Webhook style reverse shell callbacks for CTFs and pentests with browser and CLI workflows, PTY sessions, and no-PTY command mode.",
+  "url": "https://revshells.io/"
+}
+</script>
 <header class="topbar">
   <a href="/" class="brand">
     <div class="brand-logo">rsd</div>
@@ -52,12 +100,28 @@
     </div>
   </a>
   <div class="topbar-actions">
+    <a href="https://github.com/nmagill123/revshells-io" class="btn icon-btn icon-link" title="GitHub repository" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8a8.01 8.01 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.55 7.55 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path>
+      </svg>
+    </a>
     <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
     <button type="button" class="btn btn-primary" id="new-session">+ New session</button>
   </div>
 </header>
 
 <div class="main">
+  <section class="hero">
+    <h1>Webhook Style Reverse Shell Callbacks for CTFs and Pentests</h1>
+    <p>revshells.io gives you a webhook-style callback URL for reverse shell workflows, so you can catch browser and CLI-managed sessions without hand-rolling listeners, public IP plumbing, or one-off infrastructure every time.</p>
+    <p>Use it for authorized labs, CTF targets, red team infrastructure, and internal pentest workflows with interactive PTY shells, no-PTY command mode, and downloadable agent binaries.</p>
+    <ul class="hero-list">
+      <li>Browser terminal and `rsctl` CLI access</li>
+      <li>Interactive PTY mode plus HTTP no-PTY command callbacks</li>
+      <li>Per-workspace session scoping and self-serve callback URLs</li>
+    </ul>
+  </section>
+
   <div class="panel" id="rsctl-panel">
     <h2>rsctl</h2>
     <p class="hint">Mint a workspace CLI token (24h, scoped to your sessions). Run <code>rsctl login</code> once, then <code>rsctl list</code> / <code>rsctl attach</code>.</p>

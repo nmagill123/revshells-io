@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"github.com/noahmagill/webhook-rev-shell/internal/auth"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
 	"github.com/noahmagill/webhook-rev-shell/internal/config"
+	"github.com/noahmagill/webhook-rev-shell/internal/notify"
 	"github.com/noahmagill/webhook-rev-shell/internal/protocol"
 	"github.com/noahmagill/webhook-rev-shell/internal/payload"
 	rsdmw "github.com/noahmagill/webhook-rev-shell/internal/middleware"
@@ -36,6 +38,7 @@ func main() {
 	agentsGit := flag.Bool("agents-git", false, "on startup, download rs-agent release binaries from GitHub into --agents-dir")
 	agentsGitRepo := flag.String("agents-git-repo", "https://github.com/nmagill123/revshells-io", "GitHub repo for --agents-git")
 	agentsGitTag := flag.String("agents-git-tag", "", "release tag for --agents-git (e.g. v0.1.0); empty uses latest")
+	discordWebhookURL := flag.String("discord-webhook-url", "", "optional Discord webhook URL for session creation and callback notifications")
 	maxSessions := flag.Int("max-sessions-per-workspace", 12, "max active sessions per workspace")
 	flag.Parse()
 
@@ -51,9 +54,11 @@ func main() {
 
 	b := broker.New(s)
 
-	pollH := &transport.PollHandler{B: b}
+	discordN := notify.NewDiscord(*discordWebhookURL, *publicURL)
+
+	pollH := &transport.PollHandler{B: b, Discord: discordN}
 	wsOpH := &transport.WSOperatorHandler{B: b, OriginPatterns: originPatterns}
-	wsTargH := &transport.WSTargetHandler{B: b, OriginPatterns: originPatterns}
+	wsTargH := &transport.WSTargetHandler{B: b, Discord: discordN, OriginPatterns: originPatterns}
 	payloadH := &payload.PayloadHandler{PublicURL: strings.TrimRight(*publicURL, "/")}
 	agentStore := &agents.Store{Dir: *agentsDir}
 
@@ -263,6 +268,14 @@ func main() {
 				"name":  sess.Name,
 				"token": browserToken,
 			})
+			if discordN.Enabled() {
+				operatorIP := requestIP(req.RemoteAddr)
+				go func() {
+					if err := discordN.SessionCreated(sess, browserToken, operatorIP); err != nil {
+						log.Printf("discord session create notify: %v", err)
+					}
+				}()
+			}
 		})
 
 		r.Get("/web/sessions/{id}", func(w http.ResponseWriter, req *http.Request) {
@@ -427,8 +440,19 @@ func main() {
 	fmt.Fprintf(os.Stderr, "public url: %s\n", *publicURL)
 	fmt.Fprintf(os.Stderr, "max sessions per workspace: %d\n", authCfg.MaxSessionsPerWorkspace)
 	fmt.Fprintf(os.Stderr, "agents dir: %s\n", *agentsDir)
+	if discordN.Enabled() {
+		fmt.Fprintln(os.Stderr, "discord webhook: enabled")
+	}
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func requestIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err == nil {
+		return host
+	}
+	return remoteAddr
 }

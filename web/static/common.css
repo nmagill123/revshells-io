@@ -109,6 +109,12 @@ body {
   border-radius: 6px;
 }
 
+.icon-link svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 .copy-row {
   display: flex;
   align-items: stretch;

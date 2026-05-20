@@ -22,6 +22,8 @@ func ServeStatic(w http.ResponseWriter, r *http.Request, name string) {
 		w.Header().Set("Content-Type", "text/css")
 	} else if strings.HasSuffix(name, ".js") {
 		w.Header().Set("Content-Type", "application/javascript")
+	} else if strings.HasSuffix(name, ".svg") {
+		w.Header().Set("Content-Type", "image/svg+xml")
 	}
 	w.Write(data)
 }
