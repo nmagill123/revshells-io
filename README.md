@@ -2,6 +2,7 @@
 
 Callback/session broker for authorized pentests, CTF, or homelab. Targets call back over HTTPS, operators attach from browser or CLI.
 
+If you are anything like me and find reverse shells frustrating due needed a public ip to call back to, this is your solution. 
 
 ## Build
 
@@ -33,14 +34,6 @@ make agents       # required: agents-bin/linux-amd64, linux-arm64, ...
 
 `--max-sessions-per-workspace` (default `12`) limits how many active sessions each workspace can create.
 
-Put Caddy/nginx in front for TLS:
-
-```
-rs.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
-
 ## CLI
 
 ```bash
@@ -66,13 +59,6 @@ Open `http://localhost:8080/` for the **sessions hub**:
 - **rsctl** — mint workspace CLI token (24h, scoped to sessions you create in this browser)
 - Session list shows target info when connected: user@host, OS, kernel
 - **Light/dark mode**, disclaimer modal
-
-```bash
-# paste from browser hub
-rsctl login http://localhost:8080 <token>
-rsctl list
-rsctl attach <session-id>
-```
 
 ## Modes
 
