@@ -4,6 +4,8 @@ Callback/session broker for authorized pentests, CTF, or homelab. Targets call b
 
 If you are anything like me and find reverse shells frustrating due needed a public ip to call back to, this is your solution. 
 
+This is very much a WIP; website and code is maintained on best effort. 
+
 ## Build
 
 CI builds static **rsd**, **rsctl**, and **rs-agent** for:
