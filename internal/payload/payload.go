@@ -137,7 +137,6 @@ func (h *PayloadHandler) ShellShim(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PayloadHandler) PythonShim(w http.ResponseWriter, r *http.Request) {
-	// legacy alias: same bootstrap wrapper
 	h.RevShell(w, r, chi.URLParam(r, "id"), chi.URLParam(r, "secret"))
 }
 
