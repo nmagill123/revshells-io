@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	chlog "github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/noahmagill/webhook-rev-shell/internal/config"
 	"github.com/noahmagill/webhook-rev-shell/internal/operatorinput"
@@ -15,6 +16,7 @@ import (
 )
 
 var ErrSessionCapReached = errors.New("session cap reached")
+var ErrSessionClosed = errors.New("session closed")
 
 type OperatorConn struct {
 	ID     string
@@ -65,6 +67,8 @@ func (r *Room) BroadcastToOperators(data []byte) {
 		select {
 		case op.Send <- data:
 		default:
+			chlog.Warn("disconnecting slow operator", "operator_id", op.ID, "session_id", r.Session.ID)
+			op.Cancel()
 		}
 		return true
 	})
@@ -184,7 +188,7 @@ func (b *Broker) GetOrLoadRoom(sessionID string) (*Room, error) {
 		return nil, err
 	}
 	if sess.State == protocol.StateExpired || sess.State == protocol.StateKilled {
-		return nil, err
+		return nil, ErrSessionClosed
 	}
 
 	b.mu.Lock()
@@ -220,30 +224,21 @@ func authCanCreate(s *store.Store, cfg config.Auth, workspaceID string) error {
 }
 
 func (b *Broker) KillSession(id string) error {
-	b.mu.Lock()
-	room := b.rooms[id]
-	delete(b.rooms, id)
-	b.mu.Unlock()
-
-	if room != nil {
-		room.Operators.Range(func(_, val any) bool {
-			op := val.(*OperatorConn)
-			op.Cancel()
-			return true
-		})
-		room.Targets.Range(func(_, val any) bool {
-			tl := val.(*TargetLink)
-			close(tl.Done)
-			return true
-		})
-	}
-
 	sess, err := b.store.GetSession(id)
 	if err != nil {
 		return err
 	}
 	sess.State = protocol.StateKilled
-	return b.store.PutSession(sess)
+	if err := b.store.PutSession(sess); err != nil {
+		return err
+	}
+	if err := b.store.CleanupSessionArtifacts(id); err != nil {
+		return err
+	}
+	if room := b.popRoom(id); room != nil {
+		shutdownRoom(room)
+	}
+	return nil
 }
 
 func (b *Broker) Touch(sessionID string) {
@@ -390,24 +385,34 @@ func (b *Broker) PruneStaleTargets() {
 
 func (b *Broker) Sweep(maxIdle time.Duration) {
 	expired, _ := b.store.ExpireSessions(maxIdle)
-	b.mu.Lock()
 	for _, id := range expired {
-		if room := b.rooms[id]; room != nil {
-			room.Operators.Range(func(_, val any) bool {
-				op := val.(*OperatorConn)
-				op.Cancel()
-				return true
-			})
-			room.Targets.Range(func(_, val any) bool {
-				tl := val.(*TargetLink)
-				close(tl.Done)
-				return true
-			})
+		_ = b.store.CleanupSessionArtifacts(id)
+		if room := b.popRoom(id); room != nil {
+			shutdownRoom(room)
 		}
-		delete(b.rooms, id)
 	}
-	b.mu.Unlock()
 	_ = b.store.PruneBrowserTokens()
 	_ = b.store.PruneWorkspaceBrowserTokens()
 	_ = b.store.PruneOperatorTokens()
+}
+
+func (b *Broker) popRoom(sessionID string) *Room {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	room := b.rooms[sessionID]
+	delete(b.rooms, sessionID)
+	return room
+}
+
+func shutdownRoom(room *Room) {
+	room.Operators.Range(func(_, val any) bool {
+		op := val.(*OperatorConn)
+		op.Cancel()
+		return true
+	})
+	room.Targets.Range(func(_, val any) bool {
+		tl := val.(*TargetLink)
+		close(tl.Done)
+		return true
+	})
 }

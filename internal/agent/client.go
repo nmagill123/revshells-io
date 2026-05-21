@@ -389,10 +389,30 @@ func (s *cmdShell) run(line string) (string, bool) {
 	}
 
 	c := exec.Command(s.shell, "-c", line)
-	c.Env = append(os.Environ(), "PWD="+s.cwd, "TERM=dumb")
+	c.Env = withEnvOverrides(os.Environ(), map[string]string{
+		"PWD":  s.cwd,
+		"TERM": "dumb",
+	})
 	c.Dir = s.cwd
 	out, _ := c.CombinedOutput()
 	return string(out), false
+}
+
+func withEnvOverrides(base []string, overrides map[string]string) []string {
+	out := make([]string, 0, len(base)+len(overrides))
+	for _, kv := range base {
+		key, _, ok := strings.Cut(kv, "=")
+		if ok {
+			if _, exists := overrides[key]; exists {
+				continue
+			}
+		}
+		out = append(out, kv)
+	}
+	for key, value := range overrides {
+		out = append(out, key+"="+value)
+	}
+	return out
 }
 
 // normalizeCRLF ensures every \n is preceded by \r so raw-mode terminals don't staircase.

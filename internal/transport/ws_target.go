@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net"
 	"net/http"
 	"time"
 
+	chlog "github.com/charmbracelet/log"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
@@ -128,7 +128,7 @@ func (h *WSTargetHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		callbackIP := requestIPFromRemote(r.RemoteAddr)
 		go func() {
 			if err := h.Discord.CallbackConnected(sess, target, callbackIP); err != nil {
-				log.Printf("discord callback notify: %v", err)
+				chlog.Error("discord callback notify failed", "session_id", sessionID, "callback_ip", callbackIP, "transport", "websocket", "err", err)
 			}
 		}()
 	}

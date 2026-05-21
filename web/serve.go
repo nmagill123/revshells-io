@@ -18,6 +18,7 @@ func ServeStatic(w http.ResponseWriter, r *http.Request, name string) {
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	if strings.HasSuffix(name, ".css") {
 		w.Header().Set("Content-Type", "text/css")
 	} else if strings.HasSuffix(name, ".js") {
@@ -35,6 +36,7 @@ func ServePage(w http.ResponseWriter, name string) {
 		return
 	}
 	body := strings.ReplaceAll(string(data), "__RSD_VERSION__", version.Version)
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(body))
 }

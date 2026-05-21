@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"time"
 
+	chlog "github.com/charmbracelet/log"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
@@ -75,7 +75,7 @@ func (h *PollHandler) Register(w http.ResponseWriter, r *http.Request) {
 		callbackIP := requestIP(r)
 		go func() {
 			if err := h.Discord.CallbackConnected(sess, target, callbackIP); err != nil {
-				log.Printf("discord callback notify: %v", err)
+				chlog.Error("discord callback notify failed", "session_id", sessionID, "callback_ip", callbackIP, "err", err)
 			}
 		}()
 	}
@@ -149,6 +149,7 @@ func (h *PollHandler) Poll(w http.ResponseWriter, r *http.Request) {
 func (h *PollHandler) Push(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	secret := chi.URLParam(r, "secret")
+	targetID := r.URL.Query().Get("target_id")
 
 	sess, err := h.B.Store().GetSession(sessionID)
 	if err != nil || sess.Secret != secret {
@@ -161,6 +162,11 @@ func (h *PollHandler) Push(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no room", http.StatusNotFound)
 		return
 	}
+	val, ok := room.Targets.Load(targetID)
+	if targetID == "" || !ok {
+		http.Error(w, "target not found", http.StatusNotFound)
+		return
+	}
 
 	data, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1MB max
 	if err != nil {
@@ -171,11 +177,8 @@ func (h *PollHandler) Push(w http.ResponseWriter, r *http.Request) {
 	room.Transcript.Write(data)
 	room.BroadcastToOperators(data)
 	h.B.Touch(sessionID)
-	targetID := r.URL.Query().Get("target_id")
 	room.TouchClaim(targetID)
-	if val, ok := room.Targets.Load(targetID); ok {
-		val.(*broker.TargetLink).Touch()
-	}
+	val.(*broker.TargetLink).Touch()
 
 	w.WriteHeader(http.StatusOK)
 }

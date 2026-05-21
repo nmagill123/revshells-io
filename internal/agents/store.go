@@ -6,7 +6,15 @@ import (
 	"path/filepath"
 )
 
-// Platform names: linux-amd64, linux-arm64, darwin-amd64, darwin-arm64
+var allowedPlatforms = map[string]struct{}{
+	"linux-amd64":  {},
+	"linux-arm64":  {},
+	"linux-386":    {},
+	"darwin-amd64": {},
+	"darwin-arm64": {},
+}
+
+// Platform names: linux-amd64, linux-arm64, linux-386, darwin-amd64, darwin-arm64
 type Store struct {
 	Dir string
 }
@@ -14,6 +22,9 @@ type Store struct {
 func (s *Store) Get(platform string) ([]byte, error) {
 	if s.Dir == "" {
 		return nil, fmt.Errorf("no agents directory configured")
+	}
+	if _, ok := allowedPlatforms[platform]; !ok {
+		return nil, fmt.Errorf("invalid agent platform %q", platform)
 	}
 	path := filepath.Join(s.Dir, platform)
 	data, err := os.ReadFile(path)

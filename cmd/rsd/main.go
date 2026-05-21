@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	chlog "github.com/charmbracelet/log"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/noahmagill/webhook-rev-shell/internal/agents"
@@ -40,7 +40,19 @@ func main() {
 	agentsGitTag := flag.String("agents-git-tag", "", "release tag for --agents-git (e.g. v0.1.0); empty uses latest")
 	discordWebhookURL := flag.String("discord-webhook-url", "", "optional Discord webhook URL for session creation and callback notifications")
 	maxSessions := flag.Int("max-sessions-per-workspace", 12, "max active sessions per workspace")
+	verbose := flag.Bool("verbose", false, "enable verbose debug logging")
 	flag.Parse()
+
+	level := chlog.InfoLevel
+	if *verbose {
+		level = chlog.DebugLevel
+	}
+	logger := chlog.NewWithOptions(os.Stderr, chlog.Options{
+		Level:           level,
+		ReportTimestamp: true,
+		TimeFormat:      time.RFC3339,
+	})
+	chlog.SetDefault(logger)
 
 	authCfg := config.DefaultAuth(*publicURL)
 	authCfg.MaxSessionsPerWorkspace = *maxSessions
@@ -48,7 +60,7 @@ func main() {
 
 	s, err := store.Open(*dbPath)
 	if err != nil {
-		log.Fatalf("open db: %v", err)
+		chlog.Fatal("open db failed", "path", *dbPath, "err", err)
 	}
 	defer s.Close()
 
@@ -68,11 +80,11 @@ func main() {
 			Tag:  *agentsGitTag,
 			Dir:  *agentsDir,
 		}
-		fmt.Fprintf(os.Stderr, "agents-git: syncing from %s → %s\n", agents.ReleaseDownloadBase(gitCfg), *agentsDir)
+		chlog.Info("syncing agents from GitHub", "source", agents.ReleaseDownloadBase(gitCfg), "dir", *agentsDir)
 		if err := agents.SyncFromGitHub(gitCfg); err != nil {
-			log.Fatalf("agents-git sync: %v", err)
+			chlog.Fatal("agents-git sync failed", "err", err)
 		}
-		fmt.Fprintf(os.Stderr, "agents-git: sync complete\n")
+		chlog.Info("agents-git sync complete", "dir", *agentsDir)
 	}
 
 	originMW := rsdmw.RequireSameOrigin(originPatterns)
@@ -272,7 +284,7 @@ func main() {
 				operatorIP := requestIP(req.RemoteAddr)
 				go func() {
 					if err := discordN.SessionCreated(sess, browserToken, operatorIP); err != nil {
-						log.Printf("discord session create notify: %v", err)
+						chlog.Error("discord session create notify failed", "session_id", sess.ID, "operator_ip", operatorIP, "err", err)
 					}
 				}()
 			}
@@ -436,16 +448,19 @@ func main() {
 		srv.Shutdown(shutCtx)
 	}()
 
-	fmt.Fprintf(os.Stderr, "rsd %s listening on %s\n", web.Version(), *listen)
-	fmt.Fprintf(os.Stderr, "public url: %s\n", *publicURL)
-	fmt.Fprintf(os.Stderr, "max sessions per workspace: %d\n", authCfg.MaxSessionsPerWorkspace)
-	fmt.Fprintf(os.Stderr, "agents dir: %s\n", *agentsDir)
+	chlog.Info("rsd listening",
+		"version", web.Version(),
+		"listen", *listen,
+		"public_url", *publicURL,
+		"max_sessions_per_workspace", authCfg.MaxSessionsPerWorkspace,
+		"agents_dir", *agentsDir,
+	)
 	if discordN.Enabled() {
-		fmt.Fprintln(os.Stderr, "discord webhook: enabled")
+		chlog.Info("discord webhook enabled")
 	}
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(err)
+		chlog.Fatal("server exited", "err", err)
 	}
 }
 
