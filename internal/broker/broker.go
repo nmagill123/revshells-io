@@ -47,9 +47,19 @@ func (tl *TargetLink) LastSeen() time.Time {
 	return tl.lastSeen
 }
 
-// TargetStaleTimeout is how long without poll/push/WS activity before a beacon is removed.
+// TargetStaleTimeoutPoll is how long a poll/push beacon may be idle before removal.
 // Must exceed poll long-poll duration (30s) plus reconnect slack.
-const TargetStaleTimeout = 45 * time.Second
+const TargetStaleTimeoutPoll = 45 * time.Second
+
+// TargetStaleTimeoutWebSocket is how long a PTY WebSocket beacon may be idle before removal.
+const TargetStaleTimeoutWebSocket = time.Hour
+
+func targetStaleTimeout(tl *TargetLink) time.Duration {
+	if tl.Info != nil && tl.Info.Transport == "websocket" {
+		return TargetStaleTimeoutWebSocket
+	}
+	return TargetStaleTimeoutPoll
+}
 
 type Room struct {
 	Session    *protocol.Session
@@ -367,12 +377,12 @@ func (b *Broker) PruneStaleTargets() {
 	}
 	b.mu.RUnlock()
 
-	cutoff := time.Now().Add(-TargetStaleTimeout)
+	now := time.Now()
 	for _, room := range rooms {
 		var stale []string
 		room.Targets.Range(func(key, val any) bool {
 			tl := val.(*TargetLink)
-			if tl.LastSeen().Before(cutoff) {
+			if tl.LastSeen().Before(now.Add(-targetStaleTimeout(tl))) {
 				stale = append(stale, key.(string))
 			}
 			return true
