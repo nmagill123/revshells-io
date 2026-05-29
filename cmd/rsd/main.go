@@ -38,6 +38,10 @@ func main() {
 	agentsGit := flag.Bool("agents-git", false, "on startup, download rs-agent release binaries from GitHub into --agents-dir")
 	agentsGitRepo := flag.String("agents-git-repo", "https://github.com/nmagill123/revshells-io", "GitHub repo for --agents-git")
 	agentsGitTag := flag.String("agents-git-tag", "", "release tag for --agents-git (e.g. v0.1.0); empty uses latest")
+	agentsS3Bucket := flag.String("agents-s3-bucket", "", "S3 bucket for agent binaries; enables presigned download URLs when set")
+	agentsS3Prefix := flag.String("agents-s3-prefix", "agents/latest", "S3 key prefix for agent objects")
+	agentsS3Region := flag.String("agents-s3-region", "us-east-1", "AWS region for agents S3 bucket")
+	agentsPresignTTL := flag.Duration("agents-presign-ttl", 10*time.Minute, "lifetime of presigned agent download URLs")
 	discordWebhookURL := flag.String("discord-webhook-url", "", "optional Discord webhook URL for session creation and callback notifications")
 	analyticsFile := flag.String("analytics-file", "", "optional HTML snippet file injected into pages (default: web/static/analytics.local.html or /data/analytics.local.html)")
 	maxSessions := flag.Int("max-sessions-per-workspace", 12, "max active sessions per workspace")
@@ -76,8 +80,28 @@ func main() {
 	pollH := &transport.PollHandler{B: b, Discord: discordN}
 	wsOpH := &transport.WSOperatorHandler{B: b, OriginPatterns: originPatterns}
 	wsTargH := &transport.WSTargetHandler{B: b, Discord: discordN, OriginPatterns: originPatterns}
-	payloadH := &payload.PayloadHandler{PublicURL: strings.TrimRight(*publicURL, "/")}
+
+	var agentPresigner agents.Presigner
+	if *agentsS3Bucket != "" {
+		presigner, err := agents.NewS3Presigner(agents.S3Config{
+			Bucket:     *agentsS3Bucket,
+			Prefix:     *agentsS3Prefix,
+			Region:     *agentsS3Region,
+			PresignTTL: *agentsPresignTTL,
+		})
+		if err != nil {
+			chlog.Fatal("agents s3 presign init failed", "err", err)
+		}
+		agentPresigner = presigner
+		chlog.Info("agents S3 presign enabled", "bucket", *agentsS3Bucket, "prefix", *agentsS3Prefix, "region", *agentsS3Region)
+	}
+
+	payloadH := &payload.PayloadHandler{
+		PublicURL:    strings.TrimRight(*publicURL, "/"),
+		UseS3Presign: agentPresigner != nil,
+	}
 	agentStore := &agents.Store{Dir: *agentsDir}
+	agentPresignH := &transport.AgentPresignHandler{B: b, Presigner: agentPresigner}
 
 	if *agentsGit {
 		gitCfg := agents.GitSyncConfig{
@@ -95,6 +119,9 @@ func main() {
 	originMW := rsdmw.RequireSameOrigin(originPatterns)
 	rateStrict := rsdmw.RateLimit(0.5, 5)
 	rateLoose := rsdmw.RateLimit(2, 20)
+	ratePresignSession := rsdmw.RateLimitByKey(func(r *http.Request) string {
+		return chi.URLParam(r, "id")
+	}, 1, 3)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -189,6 +216,9 @@ func main() {
 		r.Get("/sh", payloadH.ShellShim)
 		r.Get("/py", payloadH.PythonShim)
 		r.Get("/info", payloadH.Info)
+		if agentPresigner != nil {
+			r.With(rateLoose, ratePresignSession).Post("/agent-url", agentPresignH.AgentURL)
+		}
 	})
 
 	attachHandler := func(w http.ResponseWriter, req *http.Request) {
@@ -414,6 +444,10 @@ func main() {
 		})
 
 		r.With(rateLoose).Get("/{id}/agent/{platform}", func(w http.ResponseWriter, req *http.Request) {
+			if agentPresigner != nil {
+				http.Error(w, "agent downloads use presigned URLs", http.StatusGone)
+				return
+			}
 			sessionID := chi.URLParam(req, "id")
 			platform := chi.URLParam(req, "platform")
 			sess, err := s.GetSession(sessionID)

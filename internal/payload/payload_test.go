@@ -20,6 +20,26 @@ func TestBootstrapUsesLocalAgentURL(t *testing.T) {
 	if !strings.Contains(out, `url="$SERVER/$SESSION/agent/$PLATFORM"`) {
 		t.Fatalf("missing local agent url")
 	}
+	if strings.Contains(out, "agent-url") {
+		t.Fatal("local bootstrap should not reference presign endpoint")
+	}
+}
+
+func TestBootstrapUsesS3PresignWhenEnabled(t *testing.T) {
+	var buf bytes.Buffer
+	_ = bootstrapSh.Execute(&buf, shimData{
+		BaseURL:      "https://revshells.io",
+		SessionID:    "sess-uuid",
+		Secret:       "secret",
+		UseS3Presign: true,
+	})
+	out := buf.String()
+	if !strings.Contains(out, `$SERVER/s/$SESSION/$SECRET/agent-url`) {
+		t.Fatalf("missing presign endpoint: %s", out)
+	}
+	if strings.Contains(out, `url="$SERVER/$SESSION/agent/$PLATFORM"`) {
+		t.Fatal("s3 bootstrap should not use direct agent url")
+	}
 }
 
 func TestBootstrapNoPTYUsesUnameFallback(t *testing.T) {

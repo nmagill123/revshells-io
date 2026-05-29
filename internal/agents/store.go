@@ -14,6 +14,12 @@ var allowedPlatforms = map[string]struct{}{
 	"darwin-arm64": {},
 }
 
+// ValidPlatform reports whether platform is an allowed agent key name.
+func ValidPlatform(platform string) bool {
+	_, ok := allowedPlatforms[platform]
+	return ok
+}
+
 // Platform names: linux-amd64, linux-arm64, linux-386, darwin-amd64, darwin-arm64
 type Store struct {
 	Dir string
