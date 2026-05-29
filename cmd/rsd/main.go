@@ -372,6 +372,18 @@ func main() {
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		web.ServePage(w, "hub.html")
 	})
+	r.Get("/articles", func(w http.ResponseWriter, req *http.Request) {
+		web.ServeArticlesIndex(w)
+	})
+	r.Get("/articles/{slug}", func(w http.ResponseWriter, req *http.Request) {
+		web.ServeArticle(w, chi.URLParam(req, "slug"))
+	})
+	r.Get("/sitemap.xml", func(w http.ResponseWriter, req *http.Request) {
+		web.ServeSitemap(w, *publicURL)
+	})
+	r.Get("/robots.txt", func(w http.ResponseWriter, req *http.Request) {
+		web.ServeRobots(w, *publicURL)
+	})
 
 	r.Group(func(r chi.Router) {
 		r.With(rateLoose).Get("/{id}/attach", attachHandler)

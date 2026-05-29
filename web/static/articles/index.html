@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reverse shell guides | revshells.io</title>
+<meta name="description" content="How-to guides for bash, PHP, Python, and JavaScript reverse shell callbacks using revshells.io — a webhook-style alternative to hand-rolled listeners and msfvenom payloads.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://revshells.io/articles">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="Reverse shell guides | revshells.io">
+<meta property="og:description" content="How-to guides for bash, PHP, Python, and JavaScript reverse shell callbacks using revshells.io — a webhook-style alternative to hand-rolled listeners and msfvenom payloads.">
+<meta property="og:url" content="https://revshells.io/articles">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Reverse shell guides | revshells.io">
+<meta name="twitter:description" content="Bash, PHP, Python, JavaScript reverse shell guides and an msfvenom-style workflow on revshells.io.">
+<!-- __ANALYTICS_LOCAL__ -->
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">revshells.io</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <a href="/" class="btn">Open hub</a>
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+  </div>
+</header>
+
+<main class="article-main">
+  <h1>Reverse shell guides</h1>
+  <p class="article-lead">Short, practical walkthroughs for catching callbacks on revshells.io during authorized CTF and pentest work.</p>
+
+  <ul class="article-card-list">
+    <li><a href="/articles/bash-reverse-shell"><strong>Bash reverse shell</strong><span>One-liner curl bootstrap, PTY attach, and no-PTY mode.</span></a></li>
+    <li><a href="/articles/php-reverse-shell"><strong>PHP reverse shell</strong><span>Fetch and run your session bootstrap from PHP on the target.</span></a></li>
+    <li><a href="/articles/python-reverse-shell"><strong>Python reverse shell</strong><span>Reverse shell Python callbacks via urllib or subprocess.</span></a></li>
+    <li><a href="/articles/javascript-reverse-shell"><strong>JavaScript reverse shell</strong><span>Node.js and SSRF-style fetch-to-bootstrap patterns.</span></a></li>
+    <li><a href="/articles/msfvenom-alternative"><strong>MSFvenom alternative</strong><span>Webhook callbacks instead of msfvenom + handler plumbing.</span></a></li>
+  </ul>
+
+  <p class="article-disclaimer">Authorized testing only. You must have explicit permission before running callbacks on any system you do not own or control.</p>
+</main>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>rsdInitTopbar();</script>
+</body>
+</html>

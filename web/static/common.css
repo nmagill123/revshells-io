@@ -115,6 +115,85 @@ body {
   fill: currentColor;
 }
 
+.article-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+.article-main h1 {
+  font-size: 1.55rem;
+  line-height: 1.3;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+.article-main h2 {
+  font-size: 1.05rem;
+  margin: 1.5rem 0 0.5rem;
+  color: var(--text);
+}
+.article-main p, .article-main li {
+  color: var(--text-muted);
+  line-height: 1.65;
+  margin-bottom: 0.75rem;
+}
+.article-main ul, .article-main ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.article-main code, .article-main pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+.article-main pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.75rem 0 1rem;
+  color: var(--code-fg);
+}
+.article-main a { color: var(--accent); }
+.article-lead { font-size: 1.02rem; color: var(--text); }
+.article-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem 0;
+}
+.article-card-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.article-card-list li {
+  margin-bottom: 0.65rem;
+}
+.article-card-list a {
+  display: block;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text);
+}
+.article-card-list a:hover {
+  border-color: var(--accent);
+}
+.article-card-list span {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+.article-disclaimer {
+  font-size: 0.85rem;
+  border-left: 3px solid var(--warn-fg);
+  padding-left: 0.75rem;
+  margin: 1.5rem 0;
+}
+
 .copy-row {
   display: flex;
   align-items: stretch;

