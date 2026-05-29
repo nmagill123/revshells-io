@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bufio"
 	"net"
 	"net/http"
 	"strings"
@@ -31,6 +32,19 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
+func (r *responseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+func (r *responseRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // AccessLog emits a debug line per HTTP request when enabled (use with --verbose).
 func AccessLog(enabled bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -38,6 +52,11 @@ func AccessLog(enabled bool) func(http.Handler) http.Handler {
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if shouldSkipAccessLog(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			start := time.Now()
 			rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rec, r)
@@ -72,9 +91,6 @@ func AccessLog(enabled bool) func(http.Handler) http.Handler {
 			if r.TLS != nil {
 				fields = append(fields, "tls", true)
 			}
-			if upgrade := r.Header.Get("Upgrade"); upgrade != "" {
-				fields = append(fields, "upgrade", upgrade)
-			}
 			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 				fields = append(fields, "x_forwarded_for", fwd)
 			}
@@ -88,6 +104,19 @@ func AccessLog(enabled bool) func(http.Handler) http.Handler {
 			chlog.Debug("http request", fields...)
 		})
 	}
+}
+
+func shouldSkipAccessLog(r *http.Request) bool {
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return true
+	}
+	if rc := chi.RouteContext(r.Context()); rc != nil {
+		switch rc.RoutePattern() {
+		case "/s/{id}/{secret}/poll":
+			return true
+		}
+	}
+	return false
 }
 
 func sessionIDFromRequest(r *http.Request) string {
