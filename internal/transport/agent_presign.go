@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	chlog "github.com/charmbracelet/log"
 	"github.com/go-chi/chi/v5"
 	"github.com/noahmagill/webhook-rev-shell/internal/agents"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
@@ -62,6 +63,13 @@ func (h *AgentPresignHandler) AgentURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.B.Touch(sessionID)
+
+	chlog.Debug("agent presign issued",
+		"session_id", sessionID,
+		"platform", body.Platform,
+		"expires_at", expires.UTC(),
+		"remote_ip", requestIP(r),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)

@@ -45,7 +45,7 @@ func main() {
 	discordWebhookURL := flag.String("discord-webhook-url", "", "optional Discord webhook URL for session creation and callback notifications")
 	analyticsFile := flag.String("analytics-file", "", "optional HTML snippet file injected into pages (default: web/static/analytics.local.html or /data/analytics.local.html)")
 	maxSessions := flag.Int("max-sessions-per-workspace", 12, "max active sessions per workspace")
-	verbose := flag.Bool("verbose", false, "enable verbose debug logging")
+	verbose := flag.Bool("verbose", false, "enable verbose debug logging (HTTP access lines, session/target events; never logs shell commands)")
 	flag.Parse()
 
 	level := chlog.InfoLevel
@@ -126,6 +126,11 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
+	r.Use(middleware.RequestID)
+	if *verbose {
+		r.Use(rsdmw.AccessLog(true))
+		chlog.Info("verbose HTTP access logging enabled")
+	}
 
 	base := strings.TrimRight(*publicURL, "/")
 
@@ -315,6 +320,12 @@ func main() {
 				"name":  sess.Name,
 				"token": browserToken,
 			})
+			chlog.Debug("session created",
+				"session_id", sess.ID,
+				"workspace_id", wsID,
+				"source", "web",
+				"remote_ip", requestIP(req.RemoteAddr),
+			)
 			if discordN.Enabled() {
 				operatorIP := requestIP(req.RemoteAddr)
 				go func() {
@@ -428,6 +439,7 @@ func main() {
 			}
 			_, _ = b.GetOrLoadRoom(sessionID)
 			b.Touch(sessionID)
+			chlog.Debug("bootstrap served", "session_id", sessionID, "kind", "revshell", "remote_ip", requestIP(req.RemoteAddr))
 			payloadH.RevShell(w, req, sess.ID, sess.Secret)
 		})
 
@@ -440,6 +452,7 @@ func main() {
 			}
 			_, _ = b.GetOrLoadRoom(sessionID)
 			b.Touch(sessionID)
+			chlog.Debug("bootstrap served", "session_id", sessionID, "kind", "nopty", "remote_ip", requestIP(req.RemoteAddr))
 			payloadH.RevShellNoPTY(w, req, sess.ID, sess.Secret)
 		})
 

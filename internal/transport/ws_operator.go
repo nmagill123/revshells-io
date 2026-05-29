@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	chlog "github.com/charmbracelet/log"
 	"github.com/go-chi/chi/v5"
 	"github.com/noahmagill/webhook-rev-shell/internal/broker"
 	"github.com/noahmagill/webhook-rev-shell/internal/operatorinput"
@@ -24,6 +25,12 @@ func (h *WSOperatorHandler) Attach(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
+
+	chlog.Debug("operator attach",
+		"session_id", sessionID,
+		"operator_id", op.ID,
+		"remote_ip", requestIP(r),
+	)
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: h.OriginPatterns,

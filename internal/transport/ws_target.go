@@ -114,6 +114,18 @@ func (h *WSTargetHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
+	chlog.Debug("target registered",
+		"session_id", sessionID,
+		"target_id", targetID,
+		"transport", "websocket",
+		"mode", mode,
+		"host", reg.Host,
+		"user", reg.User,
+		"os", reg.OS,
+		"arch", reg.Arch,
+		"remote_ip", requestIPFromRemote(r.RemoteAddr),
+	)
+
 	go func() {
 		ticker := time.NewTicker(20 * time.Second)
 		defer ticker.Stop()

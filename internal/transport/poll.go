@@ -80,6 +80,18 @@ func (h *PollHandler) Register(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
+	chlog.Debug("target registered",
+		"session_id", sessionID,
+		"target_id", targetID,
+		"transport", "http_poll",
+		"mode", target.Mode,
+		"host", reg.Host,
+		"user", reg.User,
+		"os", reg.OS,
+		"arch", reg.Arch,
+		"remote_ip", requestIP(r),
+	)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"target_id": targetID,
