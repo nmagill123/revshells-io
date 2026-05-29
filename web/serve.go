@@ -36,6 +36,7 @@ func ServePage(w http.ResponseWriter, name string) {
 		return
 	}
 	body := strings.ReplaceAll(string(data), "__RSD_VERSION__", version.Version)
+	body = injectAnalytics(body)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(body))

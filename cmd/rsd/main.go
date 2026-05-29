@@ -39,6 +39,7 @@ func main() {
 	agentsGitRepo := flag.String("agents-git-repo", "https://github.com/nmagill123/revshells-io", "GitHub repo for --agents-git")
 	agentsGitTag := flag.String("agents-git-tag", "", "release tag for --agents-git (e.g. v0.1.0); empty uses latest")
 	discordWebhookURL := flag.String("discord-webhook-url", "", "optional Discord webhook URL for session creation and callback notifications")
+	analyticsFile := flag.String("analytics-file", "", "optional HTML snippet file injected into pages (default: web/static/analytics.local.html or /data/analytics.local.html)")
 	maxSessions := flag.Int("max-sessions-per-workspace", 12, "max active sessions per workspace")
 	verbose := flag.Bool("verbose", false, "enable verbose debug logging")
 	flag.Parse()
@@ -53,6 +54,10 @@ func main() {
 		TimeFormat:      time.RFC3339,
 	})
 	chlog.SetDefault(logger)
+
+	if path := web.InitAnalytics(*analyticsFile); path != "" {
+		chlog.Info("analytics snippet enabled", "path", path)
+	}
 
 	authCfg := config.DefaultAuth(*publicURL)
 	authCfg.MaxSessionsPerWorkspace = *maxSessions
