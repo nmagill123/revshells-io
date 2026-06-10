@@ -23,6 +23,23 @@ func (s *Store) initWorkspaceBuckets(tx *bolt.Tx) error {
 	return nil
 }
 
+func (s *Store) CreateWorkspaceWithToken(ws *protocol.Workspace, bt *protocol.WorkspaceBrowserToken) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		wsData, err := json.Marshal(ws)
+		if err != nil {
+			return err
+		}
+		if err := tx.Bucket(bucketWorkspaces).Put([]byte(ws.ID), wsData); err != nil {
+			return err
+		}
+		btData, err := json.Marshal(bt)
+		if err != nil {
+			return err
+		}
+		return tx.Bucket(bucketWorkspaceBrowserTokens).Put([]byte(bt.Token), btData)
+	})
+}
+
 func (s *Store) PutWorkspace(w *protocol.Workspace) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		data, err := json.Marshal(w)

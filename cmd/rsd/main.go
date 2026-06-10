@@ -116,10 +116,15 @@ func main() {
 		chlog.Info("agents-git sync complete", "dir", *agentsDir)
 	}
 
+	cookieSecure := strings.HasPrefix(*publicURL, "https://")
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	originMW := rsdmw.RequireSameOrigin(originPatterns)
-	rateStrict := rsdmw.RateLimit(0.5, 5)
-	rateLoose := rsdmw.RateLimit(2, 20)
-	ratePresignSession := rsdmw.RateLimitByKey(func(r *http.Request) string {
+	rateStrict := rsdmw.RateLimit(ctx, 0.5, 5)
+	rateLoose := rsdmw.RateLimit(ctx, 2, 20)
+	ratePresignSession := rsdmw.RateLimitByKey(ctx, func(r *http.Request) string {
 		return chi.URLParam(r, "id")
 	}, 1, 3)
 
@@ -224,6 +229,19 @@ func main() {
 		if agentPresigner != nil {
 			r.With(rateLoose, ratePresignSession).Post("/agent-url", agentPresignH.AgentURL)
 		}
+		if agentPresigner == nil {
+			r.With(rateLoose).Get("/agent/{platform}", func(w http.ResponseWriter, req *http.Request) {
+				platform := chi.URLParam(req, "platform")
+				data, err := agentStore.Get(platform)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Header().Set("Content-Disposition", "attachment; filename=rs-agent")
+				w.Write(data)
+			})
+		}
 	})
 
 	attachHandler := func(w http.ResponseWriter, req *http.Request) {
@@ -240,11 +258,12 @@ func main() {
 	}
 
 	sessionPageHandler := func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		sessionID := chi.URLParam(req, "id")
 		if t := req.URL.Query().Get("t"); t != "" {
 			bt, err := s.GetBrowserToken(t)
 			if err == nil && time.Now().Before(bt.ExpiresAt) && bt.SessionID == sessionID {
-				auth.SetSessionCookie(w, t, int(time.Until(bt.ExpiresAt).Seconds()))
+				auth.SetSessionCookie(w, t, int(time.Until(bt.ExpiresAt).Seconds()), cookieSecure)
 			}
 		}
 		if _, err := s.GetSession(sessionID); err != nil {
@@ -272,7 +291,7 @@ func main() {
 				http.Error(w, err.Error(), 500)
 				return
 			}
-			auth.SetWorkspaceCookie(w, tok, int(time.Until(exp).Seconds()))
+			auth.SetWorkspaceCookie(w, tok, int(time.Until(exp).Seconds()), cookieSecure)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]any{
 				"workspace_id": wsID,
@@ -456,37 +475,11 @@ func main() {
 			payloadH.RevShellNoPTY(w, req, sess.ID, sess.Secret)
 		})
 
-		r.With(rateLoose).Get("/{id}/agent/{platform}", func(w http.ResponseWriter, req *http.Request) {
-			if agentPresigner != nil {
-				http.Error(w, "agent downloads use presigned URLs", http.StatusGone)
-				return
-			}
-			sessionID := chi.URLParam(req, "id")
-			platform := chi.URLParam(req, "platform")
-			sess, err := s.GetSession(sessionID)
-			if err != nil || sess.State == protocol.StateExpired || sess.State == protocol.StateKilled {
-				http.Error(w, "session not found", http.StatusNotFound)
-				return
-			}
-			_ = sess
-			data, err := agentStore.Get(platform)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			w.Header().Set("Content-Disposition", "attachment; filename=rs-agent")
-			w.Write(data)
-		})
-
 		r.Get("/{id}", sessionPageHandler)
 		r.Get("/s/{id}", sessionPageHandler)
 	})
 
 	srv := &http.Server{Addr: *listen, Handler: r}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		staleTicker := time.NewTicker(5 * time.Second)

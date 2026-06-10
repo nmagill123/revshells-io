@@ -22,6 +22,7 @@ import (
 var (
 	serverURL string
 	token     string
+	httpClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 func main() {
@@ -129,7 +130,7 @@ func apiReq(method, path string, body io.Reader) (*http.Response, error) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	return http.DefaultClient.Do(req)
+	return httpClient.Do(req)
 }
 
 func newCmd() *cobra.Command {
@@ -152,7 +153,9 @@ func newCmd() *cobra.Command {
 				return fmt.Errorf("server: %s", b)
 			}
 			var result map[string]string
-			json.NewDecoder(resp.Body).Decode(&result)
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				return fmt.Errorf("parse response: %w", err)
+			}
 
 			fmt.Printf("Session:  %s\n", result["id"])
 			fmt.Printf("Browser:  %s\n", result["browser_url"])
@@ -179,7 +182,9 @@ func listCmd() *cobra.Command {
 			}
 			defer resp.Body.Close()
 			var sessions []map[string]any
-			json.NewDecoder(resp.Body).Decode(&sessions)
+			if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+				return fmt.Errorf("parse response: %w", err)
+			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintf(w, "ID\tSTATE\tTARGET\tOS / KERNEL\n")
@@ -260,7 +265,9 @@ func doAttach(sessionID string) error {
 			if err != nil {
 				return
 			}
-			os.Stdout.Write(data)
+			if _, err := os.Stdout.Write(data); err != nil {
+				return
+			}
 		}
 	}()
 

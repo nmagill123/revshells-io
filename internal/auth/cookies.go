@@ -7,24 +7,26 @@ const (
 	CookieSession   = "rs_token"
 )
 
-func SetWorkspaceCookie(w http.ResponseWriter, token string, maxAge int) {
+func SetWorkspaceCookie(w http.ResponseWriter, token string, maxAge int, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieWorkspace,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
+		Secure:   secure,
 		MaxAge:   maxAge,
 	})
 }
 
-func SetSessionCookie(w http.ResponseWriter, token string, maxAge int) {
+func SetSessionCookie(w http.ResponseWriter, token string, maxAge int, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieSession,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
+		Secure:   secure,
 		MaxAge:   maxAge,
 	})
 }

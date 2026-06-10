@@ -47,7 +47,9 @@ func (r *RingBuffer) Snapshot() [][]byte {
 	}
 	for i := 0; i < r.size; i++ {
 		idx := (start + i) % r.cap
-		out = append(out, r.buf[idx])
+		cp := make([]byte, len(r.buf[idx]))
+		copy(cp, r.buf[idx])
+		out = append(out, cp)
 	}
 	return out
 }

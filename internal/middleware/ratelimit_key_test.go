@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 func TestRateLimitByKey(t *testing.T) {
 	key := "session-1"
-	limit := RateLimitByKey(func(r *http.Request) string {
+	limit := RateLimitByKey(context.Background(), func(r *http.Request) string {
 		return r.Header.Get("X-Test-Key")
 	}, 1, 1)
 

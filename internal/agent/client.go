@@ -321,6 +321,9 @@ func newCmdShell() *cmdShell {
 	if home == "" {
 		home = os.Getenv("HOME")
 	}
+	if home == "" {
+		home = "/"
+	}
 	return &cmdShell{shell: defaultShell(), cwd: cwd, user: user, host: host, home: home}
 }
 
@@ -394,7 +397,13 @@ func (s *cmdShell) run(line string) (string, bool) {
 		"TERM": "dumb",
 	})
 	c.Dir = s.cwd
-	out, _ := c.CombinedOutput()
+	out, err := c.CombinedOutput()
+	if err != nil {
+		if len(out) > 0 {
+			return string(out), false
+		}
+		return fmt.Sprintf("%s: %v\n", line, err), false
+	}
 	return string(out), false
 }
 
@@ -468,7 +477,7 @@ func runHTTPPoll(cfg Config, reg protocol.RegisterPayload) error {
 		}
 		if out != "" {
 			b := normalizeCRLF([]byte(out))
-			if b[len(b)-1] != '\n' {
+			if len(b) > 0 && b[len(b)-1] != '\n' {
 				b = append(b, '\r', '\n')
 			}
 			push(b)
@@ -488,20 +497,22 @@ func runHTTPPoll(cfg Config, reg protocol.RegisterPayload) error {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		if pollResp.StatusCode != http.StatusOK &&
-			pollResp.StatusCode != http.StatusGone &&
-			pollResp.StatusCode != http.StatusNoContent {
-			_, _ = io.Copy(io.Discard, pollResp.Body)
-			pollResp.Body.Close()
-			time.Sleep(1500 * time.Millisecond)
-			continue
-		}
 		if pollResp.StatusCode == http.StatusGone {
 			pollResp.Body.Close()
 			return nil
 		}
+		if pollResp.StatusCode == http.StatusNotFound {
+			pollResp.Body.Close()
+			return fmt.Errorf("target pruned by server")
+		}
 		if pollResp.StatusCode == http.StatusNoContent {
 			pollResp.Body.Close()
+			continue
+		}
+		if pollResp.StatusCode != http.StatusOK {
+			_, _ = io.Copy(io.Discard, pollResp.Body)
+			pollResp.Body.Close()
+			time.Sleep(1500 * time.Millisecond)
 			continue
 		}
 		cmdBytes, _ := io.ReadAll(pollResp.Body)

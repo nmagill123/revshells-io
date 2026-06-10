@@ -155,22 +155,8 @@ func (s *Store) DeleteTarget(sessionID, targetID string) error {
 }
 
 func (s *Store) DeleteTargetsForSession(sessionID string) error {
-	prefix := []byte(sessionID + "/")
 	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(bucketTargets)
-		c := b.Cursor()
-		var keys [][]byte
-		for k, _ := c.Seek(prefix); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == string(prefix); k, _ = c.Next() {
-			cp := make([]byte, len(k))
-			copy(cp, k)
-			keys = append(keys, cp)
-		}
-		for _, k := range keys {
-			if err := b.Delete(k); err != nil {
-				return err
-			}
-		}
-		return nil
+		return s.deleteTargetsForSessionTx(tx, sessionID)
 	})
 }
 
@@ -199,22 +185,8 @@ func (s *Store) GetTranscript(sessionID, targetID string) ([][]byte, error) {
 }
 
 func (s *Store) DeleteTranscriptsForSession(sessionID string) error {
-	prefix := []byte(sessionID + "/")
 	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(bucketTranscripts)
-		c := b.Cursor()
-		var keys [][]byte
-		for k, _ := c.Seek(prefix); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == string(prefix); k, _ = c.Next() {
-			cp := make([]byte, len(k))
-			copy(cp, k)
-			keys = append(keys, cp)
-		}
-		for _, k := range keys {
-			if err := b.Delete(k); err != nil {
-				return err
-			}
-		}
-		return nil
+		return s.deleteTranscriptsForSessionTx(tx, sessionID)
 	})
 }
 
@@ -253,28 +225,7 @@ func (s *Store) DeleteBrowserToken(token string) error {
 
 func (s *Store) DeleteBrowserTokensForSession(sessionID string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(bucketBrowserTokens)
-		var toDelete [][]byte
-		if err := b.ForEach(func(k, v []byte) error {
-			var bt protocol.BrowserToken
-			if err := json.Unmarshal(v, &bt); err != nil {
-				return nil
-			}
-			if bt.SessionID == sessionID {
-				cp := make([]byte, len(k))
-				copy(cp, k)
-				toDelete = append(toDelete, cp)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		for _, k := range toDelete {
-			if err := b.Delete(k); err != nil {
-				return err
-			}
-		}
-		return nil
+		return s.deleteBrowserTokensForSessionTx(tx, sessionID)
 	})
 }
 
@@ -312,11 +263,15 @@ func (s *Store) PruneBrowserTokens() error {
 		b.ForEach(func(k, v []byte) error {
 			var bt protocol.BrowserToken
 			if err := json.Unmarshal(v, &bt); err != nil {
-				toDelete = append(toDelete, k)
+				cp := make([]byte, len(k))
+				copy(cp, k)
+				toDelete = append(toDelete, cp)
 				return nil
 			}
 			if now.After(bt.ExpiresAt) {
-				toDelete = append(toDelete, k)
+				cp := make([]byte, len(k))
+				copy(cp, k)
+				toDelete = append(toDelete, cp)
 			}
 			return nil
 		})
@@ -370,11 +325,15 @@ func (s *Store) PruneOperatorTokens() error {
 		b.ForEach(func(k, v []byte) error {
 			var t OperatorToken
 			if err := json.Unmarshal(v, &t); err != nil {
-				toDelete = append(toDelete, k)
+				cp := make([]byte, len(k))
+				copy(cp, k)
+				toDelete = append(toDelete, cp)
 				return nil
 			}
 			if now.After(t.ExpiresAt) {
-				toDelete = append(toDelete, k)
+				cp := make([]byte, len(k))
+				copy(cp, k)
+				toDelete = append(toDelete, cp)
 			}
 			return nil
 		})
@@ -387,43 +346,107 @@ func (s *Store) PruneOperatorTokens() error {
 
 func (s *Store) DeleteOperatorTokensForSession(sessionID string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(bucketTokens)
-		var toDelete [][]byte
-		if err := b.ForEach(func(k, v []byte) error {
-			var t OperatorToken
-			if err := json.Unmarshal(v, &t); err != nil {
-				return nil
-			}
-			if t.SessionID == sessionID {
-				cp := make([]byte, len(k))
-				copy(cp, k)
-				toDelete = append(toDelete, cp)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		for _, k := range toDelete {
-			if err := b.Delete(k); err != nil {
-				return err
-			}
-		}
-		return nil
+		return s.deleteOperatorTokensForSessionTx(tx, sessionID)
 	})
 }
 
 func (s *Store) CleanupSessionArtifacts(sessionID string) error {
-	if err := s.DeleteTargetsForSession(sessionID); err != nil {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		if err := s.deleteTargetsForSessionTx(tx, sessionID); err != nil {
+			return err
+		}
+		if err := s.deleteTranscriptsForSessionTx(tx, sessionID); err != nil {
+			return err
+		}
+		if err := s.deleteBrowserTokensForSessionTx(tx, sessionID); err != nil {
+			return err
+		}
+		return s.deleteOperatorTokensForSessionTx(tx, sessionID)
+	})
+}
+
+func (s *Store) deleteTargetsForSessionTx(tx *bolt.Tx, sessionID string) error {
+	prefix := []byte(sessionID + "/")
+	b := tx.Bucket(bucketTargets)
+	c := b.Cursor()
+	var keys [][]byte
+	for k, _ := c.Seek(prefix); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == string(prefix); k, _ = c.Next() {
+		cp := make([]byte, len(k))
+		copy(cp, k)
+		keys = append(keys, cp)
+	}
+	for _, k := range keys {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) deleteTranscriptsForSessionTx(tx *bolt.Tx, sessionID string) error {
+	prefix := []byte(sessionID + "/")
+	b := tx.Bucket(bucketTranscripts)
+	c := b.Cursor()
+	var keys [][]byte
+	for k, _ := c.Seek(prefix); k != nil && len(k) >= len(prefix) && string(k[:len(prefix)]) == string(prefix); k, _ = c.Next() {
+		cp := make([]byte, len(k))
+		copy(cp, k)
+		keys = append(keys, cp)
+	}
+	for _, k := range keys {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) deleteBrowserTokensForSessionTx(tx *bolt.Tx, sessionID string) error {
+	b := tx.Bucket(bucketBrowserTokens)
+	var toDelete [][]byte
+	if err := b.ForEach(func(k, v []byte) error {
+		var bt protocol.BrowserToken
+		if err := json.Unmarshal(v, &bt); err != nil {
+			return nil
+		}
+		if bt.SessionID == sessionID {
+			cp := make([]byte, len(k))
+			copy(cp, k)
+			toDelete = append(toDelete, cp)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
-	if err := s.DeleteTranscriptsForSession(sessionID); err != nil {
+	for _, k := range toDelete {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) deleteOperatorTokensForSessionTx(tx *bolt.Tx, sessionID string) error {
+	b := tx.Bucket(bucketTokens)
+	var toDelete [][]byte
+	if err := b.ForEach(func(k, v []byte) error {
+		var t OperatorToken
+		if err := json.Unmarshal(v, &t); err != nil {
+			return nil
+		}
+		if t.SessionID == sessionID {
+			cp := make([]byte, len(k))
+			copy(cp, k)
+			toDelete = append(toDelete, cp)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
-	if err := s.DeleteBrowserTokensForSession(sessionID); err != nil {
-		return err
-	}
-	if err := s.DeleteOperatorTokensForSession(sessionID); err != nil {
-		return err
+	for _, k := range toDelete {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
 	}
 	return nil
 }

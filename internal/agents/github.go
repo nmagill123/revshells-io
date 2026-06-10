@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -56,13 +57,27 @@ func SyncFromGitHub(cfg GitSyncConfig) error {
 	base := ReleaseDownloadBase(cfg)
 	client := &http.Client{Timeout: 10 * time.Minute}
 
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		firstErr error
+	)
 	for _, p := range releaseAssets {
-		url := base + "/" + p.Asset
-		if err := downloadReleaseAsset(client, url, filepath.Join(cfg.Dir, p.Platform)); err != nil {
-			return fmt.Errorf("%s: %w", p.Platform, err)
-		}
+		wg.Add(1)
+		go func(p struct{ Platform, Asset string }) {
+			defer wg.Done()
+			url := base + "/" + p.Asset
+			if err := downloadReleaseAsset(client, url, filepath.Join(cfg.Dir, p.Platform)); err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("%s: %w", p.Platform, err)
+				}
+				mu.Unlock()
+			}
+		}(p)
 	}
-	return nil
+	wg.Wait()
+	return firstErr
 }
 
 func downloadReleaseAsset(client *http.Client, url, dest string) error {

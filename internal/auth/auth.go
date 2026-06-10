@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -47,7 +48,7 @@ func ValidateBrowserTokenForSession(s *store.Store, r *http.Request, sessionID s
 	if time.Now().After(bt.ExpiresAt) {
 		return fmt.Errorf("expired")
 	}
-	if bt.SessionID != sessionID {
+	if subtle.ConstantTimeCompare([]byte(bt.SessionID), []byte(sessionID)) != 1 {
 		return fmt.Errorf("wrong session")
 	}
 	return nil

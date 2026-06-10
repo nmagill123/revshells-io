@@ -17,7 +17,7 @@ func TestBootstrapUsesLocalAgentURL(t *testing.T) {
 	if strings.Contains(out, "GIT_BASE") || strings.Contains(out, "github.com") {
 		t.Fatalf("bootstrap should not reference GitHub: %s", out)
 	}
-	if !strings.Contains(out, `url="$SERVER/$SESSION/agent/$PLATFORM"`) {
+	if !strings.Contains(out, `url="$SERVER/s/$SESSION/$SECRET/agent/$PLATFORM"`) {
 		t.Fatalf("missing local agent url")
 	}
 	if strings.Contains(out, "agent-url") {
@@ -37,7 +37,7 @@ func TestBootstrapUsesS3PresignWhenEnabled(t *testing.T) {
 	if !strings.Contains(out, `$SERVER/s/$SESSION/$SECRET/agent-url`) {
 		t.Fatalf("missing presign endpoint: %s", out)
 	}
-	if strings.Contains(out, `url="$SERVER/$SESSION/agent/$PLATFORM"`) {
+	if strings.Contains(out, `url="$SERVER/s/$SESSION/$SECRET/agent/$PLATFORM"`) {
 		t.Fatal("s3 bootstrap should not use direct agent url")
 	}
 }

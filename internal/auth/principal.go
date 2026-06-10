@@ -63,6 +63,12 @@ func ResolveBearer(s *store.Store, bearer string) (Principal, error) {
 }
 
 func WorkspaceIDFromRequest(s *store.Store, r *http.Request) (string, error) {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		p, err := ResolveBearer(s, strings.TrimPrefix(auth, "Bearer "))
+		if err == nil && p.WorkspaceID != "" {
+			return p.WorkspaceID, nil
+		}
+	}
 	if c, err := r.Cookie(CookieWorkspace); err == nil && c.Value != "" {
 		bt, err := s.GetWorkspaceBrowserToken(c.Value)
 		if err != nil {

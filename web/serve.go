@@ -4,9 +4,12 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/noahmagill/webhook-rev-shell/internal/version"
 )
+
+var pageCache sync.Map
 
 func Version() string {
 	return version.Version
@@ -30,6 +33,12 @@ func ServeStatic(w http.ResponseWriter, r *http.Request, name string) {
 }
 
 func ServePage(w http.ResponseWriter, name string) {
+	if cached, ok := pageCache.Load(name); ok {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(cached.([]byte))
+		return
+	}
 	data, err := fs.ReadFile(Static, "static/"+name)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -37,7 +46,9 @@ func ServePage(w http.ResponseWriter, name string) {
 	}
 	body := strings.ReplaceAll(string(data), "__RSD_VERSION__", version.Version)
 	body = injectAnalytics(body)
+	rendered := []byte(body)
+	pageCache.Store(name, rendered)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(body))
+	w.Write(rendered)
 }

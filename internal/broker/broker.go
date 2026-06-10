@@ -31,8 +31,17 @@ type TargetLink struct {
 	Info      *protocol.Target
 	CmdQueue  chan []byte // commands to send to target
 	Done      chan struct{}
+	closeOnce sync.Once
 	lastSeen  time.Time
 	seenMu    sync.Mutex
+}
+
+// closeDone closes Done exactly once. Both RemoveTarget and shutdownRoom may
+// race to tear down the same target (e.g. a beacon disconnect interleaving with
+// a session kill/expire), so the close must be idempotent to avoid a
+// "close of closed channel" panic.
+func (tl *TargetLink) closeDone() {
+	tl.closeOnce.Do(func() { close(tl.Done) })
 }
 
 func (tl *TargetLink) Touch() {
@@ -62,13 +71,15 @@ func targetStaleTimeout(tl *TargetLink) time.Duration {
 }
 
 type Room struct {
-	Session    *protocol.Session
-	Targets    sync.Map // target_id -> *TargetLink
-	Operators  sync.Map // conn_id -> *OperatorConn
-	Transcript *RingBuffer
-	mu         sync.RWMutex
-	claimMu    sync.Mutex
-	claimed    *beaconClaim
+	Session     *protocol.Session
+	sessionID   string
+	Targets     sync.Map
+	Operators   sync.Map
+	Transcript  *RingBuffer
+	mu          sync.RWMutex
+	claimMu     sync.Mutex
+	claimed     *beaconClaim
+	lastDBTouch time.Time
 }
 
 func (r *Room) BroadcastToOperators(data []byte) {
@@ -172,11 +183,13 @@ func (b *Broker) CreateSession(name, ownerWorkspaceID string, cfg config.Auth) (
 	b.mu.Lock()
 	b.rooms[id] = &Room{
 		Session:    sess,
+		sessionID:  id,
 		Transcript: NewRingBuffer(1024),
 	}
 	b.mu.Unlock()
 
-	return sess, browserToken, nil
+	sessCopy := *sess
+	return &sessCopy, browserToken, nil
 }
 
 func (b *Broker) GetRoom(sessionID string) *Room {
@@ -193,6 +206,11 @@ func (b *Broker) GetOrLoadRoom(sessionID string) (*Room, error) {
 		return room, nil
 	}
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if r := b.rooms[sessionID]; r != nil {
+		return r, nil
+	}
 	sess, err := b.store.GetSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -200,14 +218,9 @@ func (b *Broker) GetOrLoadRoom(sessionID string) (*Room, error) {
 	if sess.State == protocol.StateExpired || sess.State == protocol.StateKilled {
 		return nil, ErrSessionClosed
 	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if r := b.rooms[sessionID]; r != nil {
-		return r, nil
-	}
 	room = &Room{
 		Session:    sess,
+		sessionID:  sessionID,
 		Transcript: NewRingBuffer(1024),
 	}
 	b.rooms[sessionID] = room
@@ -255,12 +268,20 @@ func (b *Broker) Touch(sessionID string) {
 	b.mu.RLock()
 	room := b.rooms[sessionID]
 	b.mu.RUnlock()
-	if room != nil {
-		room.mu.Lock()
-		room.Session.LastActivity = time.Now()
-		room.mu.Unlock()
+	if room == nil {
+		return
 	}
-	_ = b.store.TouchSession(sessionID)
+	now := time.Now()
+	room.mu.Lock()
+	room.Session.LastActivity = now
+	shouldFlush := now.Sub(room.lastDBTouch) > 30*time.Second
+	if shouldFlush {
+		room.lastDBTouch = now
+	}
+	room.mu.Unlock()
+	if shouldFlush {
+		_ = b.store.TouchSession(sessionID)
+	}
 }
 
 func (b *Broker) RegisterTarget(sessionID string, info *protocol.Target) (*TargetLink, error) {
@@ -297,11 +318,7 @@ func (b *Broker) RegisterTarget(sessionID string, info *protocol.Target) (*Targe
 }
 
 func (b *Broker) updateSessionTarget(sessionID string, info *protocol.Target) {
-	sess, err := b.store.GetSession(sessionID)
-	if err != nil {
-		return
-	}
-	sess.LastTarget = &protocol.TargetSnapshot{
+	snapshot := &protocol.TargetSnapshot{
 		User:   info.User,
 		Host:   info.Host,
 		OS:     info.OS,
@@ -309,10 +326,10 @@ func (b *Broker) updateSessionTarget(sessionID string, info *protocol.Target) {
 		System: info.System,
 		Mode:   info.Mode,
 	}
-	_ = b.store.PutSession(sess)
 	if room := b.GetRoom(sessionID); room != nil {
 		room.mu.Lock()
-		room.Session = sess
+		room.Session.LastTarget = snapshot
+		_ = b.store.PutSession(room.Session)
 		room.mu.Unlock()
 	}
 }
@@ -326,10 +343,10 @@ func (b *Broker) AddOperator(sessionID string) (*OperatorConn, *Room, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	op := &OperatorConn{
-		ID:     uuid.New().String()[:8],
-		Send:   make(chan []byte, 256),
-		Done:   done,
-		Ctx:    ctx,
+		ID:   uuid.New().String()[:8],
+		Send: make(chan []byte, 256),
+		Done: done,
+		Ctx:  ctx,
 		Cancel: func() {
 			cancel()
 			select {
@@ -360,7 +377,9 @@ func (b *Broker) RemoveTarget(sessionID, targetID string) {
 	if room != nil {
 		wasClaimed := room.WasClaimedBy(targetID)
 		room.ReleaseClaim(targetID)
-		room.Targets.Delete(targetID)
+		if val, loaded := room.Targets.LoadAndDelete(targetID); loaded {
+			val.(*TargetLink).closeDone()
+		}
 		if wasClaimed {
 			room.DisconnectOperators()
 		}
@@ -388,7 +407,7 @@ func (b *Broker) PruneStaleTargets() {
 			return true
 		})
 		for _, id := range stale {
-			b.RemoveTarget(room.Session.ID, id)
+			b.RemoveTarget(room.sessionID, id)
 		}
 	}
 }
@@ -421,8 +440,7 @@ func shutdownRoom(room *Room) {
 		return true
 	})
 	room.Targets.Range(func(_, val any) bool {
-		tl := val.(*TargetLink)
-		close(tl.Done)
+		val.(*TargetLink).closeDone()
 		return true
 	})
 }

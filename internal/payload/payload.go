@@ -27,7 +27,7 @@ PLATFORM="$OS-$ARCH"
 
 const bootstrapDownloadLocal = `
 download() {
-  url="$SERVER/$SESSION/agent/$PLATFORM"
+  url="$SERVER/s/$SESSION/$SECRET/agent/$PLATFORM"
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL "$url" -o "$1" && chmod +x "$1" && return 0
   fi
@@ -100,18 +100,7 @@ type PayloadHandler struct {
 	UseS3Presign bool
 }
 
-// BaseURL prefers the request Host so Docker targets reach the broker correctly.
-func BaseURL(r *http.Request, configured string) string {
-	if r != nil && r.Host != "" {
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
-		if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-			scheme = proto
-		}
-		return scheme + "://" + r.Host
-	}
+func BaseURL(_ *http.Request, configured string) string {
 	return strings.TrimRight(configured, "/")
 }
 

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -9,20 +10,29 @@ import (
 )
 
 // RateLimitByKey applies a token bucket per key returned by keyFunc.
-func RateLimitByKey(keyFunc func(*http.Request) string, rps float64, burst int) func(http.Handler) http.Handler {
+//
+// WARNING: If keyFunc derives the key from request headers (e.g. X-Real-IP),
+// only deploy behind a trusted reverse proxy that strips/sets those headers.
+func RateLimitByKey(ctx context.Context, keyFunc func(*http.Request) string, rps float64, burst int) func(http.Handler) http.Handler {
 	var mu sync.Mutex
 	visitors := make(map[string]*visitor)
 
 	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Minute)
-			mu.Lock()
-			for key, v := range visitors {
-				if time.Since(v.lastSeen) > 3*time.Minute {
-					delete(visitors, key)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				mu.Lock()
+				for key, v := range visitors {
+					if time.Since(v.lastSeen) > 3*time.Minute {
+						delete(visitors, key)
+					}
 				}
+				mu.Unlock()
 			}
-			mu.Unlock()
 		}
 	}()
 

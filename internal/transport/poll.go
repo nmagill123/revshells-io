@@ -38,7 +38,7 @@ func (h *PollHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var reg protocol.RegisterPayload
-	if err := json.NewDecoder(r.Body).Decode(&reg); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&reg); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}

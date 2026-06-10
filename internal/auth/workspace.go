@@ -15,21 +15,19 @@ func BootstrapWorkspace(s *store.Store, cfg config.Auth) (workspaceID, browserTo
 	now := time.Now()
 	expiresAt = now.Add(cfg.WorkspaceBrowserTokenTTL)
 
-	if err := s.PutWorkspace(&protocol.Workspace{ID: workspaceID, CreatedAt: now}); err != nil {
-		return "", "", time.Time{}, err
-	}
-
 	browserToken, err = GenerateToken()
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
+
+	ws := &protocol.Workspace{ID: workspaceID, CreatedAt: now}
 	bt := &protocol.WorkspaceBrowserToken{
 		Token:       browserToken,
 		WorkspaceID: workspaceID,
 		CreatedAt:   now,
 		ExpiresAt:   expiresAt,
 	}
-	if err := s.PutWorkspaceBrowserToken(bt); err != nil {
+	if err := s.CreateWorkspaceWithToken(ws, bt); err != nil {
 		return "", "", time.Time{}, err
 	}
 	return workspaceID, browserToken, expiresAt, nil

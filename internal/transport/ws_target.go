@@ -142,6 +142,7 @@ func (h *WSTargetHandler) Connect(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				tl.Touch()
+				room.TouchClaim(targetID)
 			}
 		}
 	}()
